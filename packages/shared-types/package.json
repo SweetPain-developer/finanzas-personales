@@ -1,0 +1,11 @@
+{
+  "name": "@finanzas-personales/shared-types",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "zod": "^4.4.3"
+  }
+}

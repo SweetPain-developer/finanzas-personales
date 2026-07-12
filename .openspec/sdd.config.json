@@ -1,0 +1,37 @@
+{
+  "project_name": "finanzas-personales",
+  "sdd_init_options": {
+    "execution_mode": "interactive",
+    "artifact_store": "both",
+    "chained_pr_strategy": "auto-forecast",
+    "review_budget": 200
+  },
+  "detected_stack": {
+    "manager": "pnpm",
+    "monorepo": true,
+    "workspaces": {
+      "api": {
+        "path": "apps/api",
+        "stack": ["Node.js", "Express", "TypeScript", "Prisma"]
+      },
+      "web": {
+        "path": "apps/web",
+        "stack": ["React", "TypeScript", "Vite"]
+      }
+    }
+  },
+  "testing_capabilities": {
+    "framework": "Vitest",
+    "commands": {
+      "api": "pnpm --filter \"@finanzas-personales/api\" test",
+      "web": "pnpm --filter \"@finanzas-personales/web\" test",
+      "all": "pnpm --filter \"@finanzas-personales/api\" test && pnpm --filter \"@finanzas-personales/web\" test"
+    },
+    "success_indicators": ["'Test Files X passed'", "'Tests Y passed'"],
+    "strict_tdd": true
+  },
+  "artifact_stores": {
+    "local": ".openspec",
+    "engram": true
+  }
+}
