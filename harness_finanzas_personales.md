@@ -45,7 +45,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 - Estándar UX aplicado: acciones múltiples en tarjetas van en fila horizontal inferior; eliminar rojo, pausar/desactivar/marcar pendiente ámbar, activar/reactivar/confirmar/marcar pagado verde, editar/cancelar/limpiar filtros neutral.
 - En `Movimientos`, el FAB se oculta durante detalle/edición para no bloquear acciones del formulario.
 - Estructura de repo: monorepo simplificado con workspaces (npm/pnpm), **sin Turborepo**. `apps/web`, `apps/api`, `packages/shared-types`.
-- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth no está implementado; el diseño aprobado es `User + userId` ownership, producto cerrado y sin registro público en el primer slice.
+- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth no está implementado; el diseño aprobado es `User + userId` ownership, JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado y sin registro público en el primer slice.
 - UI implementada con CSS real propio, sin Tailwind ni UI kit por ahora. No agregar librerías de estilos sin aprobación explícita.
 - Navegación actual: estado local simple en `App`, sin router ni state manager. No agregar router/state manager hasta que el flujo lo justifique.
 
@@ -116,7 +116,7 @@ Nota de producto validada: el dashboard calcula disponible como balance operativ
 
 ### Próxima tarea concreta
 
-Siguiente corte explícito: implementar **auth + ownership** según `docs/diseno_auth_ownership_finanzas_personales.md` antes de deploy público o exposición fuera del entorno local.
+Siguiente corte explícito: implementar **Slice 1: schema + seed con ownership** según `docs/diseno_auth_ownership_finanzas_personales.md`. No escribir código antes de revisar el plan del slice; no hay deploy público ni exposición fuera del entorno local hasta que auth + ownership estén implementados y verificados.
 
 ### Backlog explícito — no dar por hecho
 

@@ -15,7 +15,7 @@
 | Variables API | `apps/api/.env` debe definir `DATABASE_URL`; usar `apps/api/.env.example` como referencia. |
 | Prisma | Configuración activa en `apps/api/prisma.config.ts`; no usar `package.json#prisma`. |
 | Monorepo | Workspaces: `apps/*` y `packages/*`; API y Web se levantan por separado. |
-| Alcance V1 | Uso personal/local. Auth + ownership está diseñado, pero aún no implementado; no exponer públicamente antes de ese corte. |
+| Alcance V1 | Uso personal/local. Auth + ownership está planificado con JWT en cookie HTTP-only, `argon2id` y `INITIAL_USER_EMAIL`, pero aún no implementado; no exponer públicamente antes de ese corte verificado. |
 
 ---
 

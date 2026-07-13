@@ -58,7 +58,7 @@ Snapshot actualizado con evidencia funcional disponible al 12 de julio de 2026. 
 - Conteos post-importación local: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
 - Seguridad GitHub: repo inicializado y publicado en `origin/main` con commit `7ae4f07` (`chore: initial project setup`). Los archivos sensibles locales permanecen ignorados: `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`.
 - Sanitización pública: documentación, tests, seeds y mockups versionados usan datos demo/genéricos, sin datos financieros reales.
-- Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público debe esperar a auth + ownership.
+- Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público debe esperar a auth + ownership implementado y verificado.
 
 ## 5. Deuda técnica activa e historial resuelto
 
@@ -79,7 +79,7 @@ Implementar el siguiente corte arquitectónico planificado: autenticación con `
 
 ## Planificación auth + ownership
 
-La decisión futura de autenticación quedó documentada en `docs/diseno_auth_ownership_finanzas_personales.md`: modelo `User` con ownership por `userId`, producto cerrado en el primer slice, sin registro público ni contraseña global, y plan de implementación por schema, middleware, scoping, Web login gate, importación/seed y despliegue. **No está implementado todavía**.
+Las decisiones de autenticación quedaron cerradas y documentadas en `docs/diseno_auth_ownership_finanzas_personales.md`: JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado en el primer corte, sin registro público ni contraseña global. El plan de 8 slices está listo y el siguiente trabajo es **Slice 1: schema + seed con ownership**. **No está implementado todavía**.
 
 ## Evidencia ejecutada
 

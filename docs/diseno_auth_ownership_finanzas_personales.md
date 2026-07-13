@@ -10,6 +10,9 @@ Este documento registra la decisión de implementar autenticación con modelo `U
 |---|---|
 | Modelo de acceso | Usar `User + ownership`, no una contraseña global de aplicación. |
 | Alcance inicial | Producto cerrado: sin registro público ni invitaciones. Se crea o usa un usuario inicial. |
+| Sesión | Usar JWT firmado en cookie HTTP-only. |
+| Hash de contraseña | Usar `argon2id`. |
+| Usuario inicial/backfill | Resolver el usuario destino con `INITIAL_USER_EMAIL`. |
 | Aislamiento de datos | Toda entidad financiera pertenece a un `User` mediante `userId`. |
 | Regla base de API | Toda lectura y escritura se filtra por el `userId` del usuario autenticado. |
 
@@ -79,7 +82,9 @@ Endpoints previstos:
 
 ### Estrategia de sesión/cookie
 
-La API debe usar una cookie HTTP-only para sostener la sesión del navegador. Queda abierta la decisión entre JWT firmado o sesión firmada/almacenada, pero en ambos casos se requiere:
+La API debe usar un JWT firmado en una cookie HTTP-only para sostener la sesión del navegador. Esta es una decisión de diseño confirmada; todavía no describe comportamiento implementado.
+
+Requisitos mínimos:
 
 - Secreto de firma por variable de entorno.
 - `httpOnly` para impedir acceso desde JavaScript del cliente.
@@ -89,9 +94,13 @@ La API debe usar una cookie HTTP-only para sostener la sesión del navegador. Qu
 
 Variables esperadas, a definir al implementar:
 
-- `AUTH_SECRET` o equivalente.
+- `AUTH_SECRET` o equivalente para firmar/verificar JWT.
 - Configuración de cookie/session TTL.
 - Origen permitido para Web en producción.
+
+### Hash de contraseña
+
+Las contraseñas deben almacenarse con `argon2id`. No se debe persistir contraseña en texto plano ni usar una contraseña global de aplicación. La elección de librería concreta queda para implementación, validando compatibilidad con el runtime y el entorno de despliegue.
 
 ### Middleware y usuario actual
 
@@ -162,7 +171,7 @@ Ante `401` o expiración de sesión:
 
 ### Migración de datos existentes
 
-La migración debe crear o resolver un usuario inicial y asignarle los datos existentes:
+La migración debe crear o resolver un usuario inicial mediante `INITIAL_USER_EMAIL` y asignarle los datos existentes:
 
 - `Account`
 - `Category`
@@ -171,7 +180,7 @@ La migración debe crear o resolver un usuario inicial y asignarle los datos exi
 - `Commitment`
 - `Goal`
 
-La migración local de datos ya importados debe tratarse con cuidado: antes de correrla contra una base real, validar backup y conteos por entidad.
+La migración local de datos ya importados debe tratarse con cuidado: antes de correrla contra una base real, validar backup y conteos por entidad. No tocar datos reales durante planificación o documentación.
 
 Estado local conocido al momento de documentar este diseño: la importación real ya fue ejecutada correctamente con backup previo. Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas. Algunos registros pueden usar la fecha técnica `2026-07-01` y campos opcionales de vencimiento/pago en `null`.
 
@@ -181,31 +190,35 @@ El importador debe requerir o resolver explícitamente el usuario destino. No de
 
 Opciones aceptables para el primer corte:
 
-- Variable de entorno con email del usuario destino.
-- Parámetro CLI con email/id.
-- Resolución del usuario inicial si el producto sigue cerrado y solo existe uno.
+- Variable de entorno `INITIAL_USER_EMAIL` con el email del usuario destino.
+- Resolución explícita del usuario inicial si el producto sigue cerrado y solo existe uno, siempre derivada de esa configuración.
 
 ### Seed demo
 
 El seed debe crear un usuario demo y asociar toda la data demo a ese usuario. Los tests o entornos demo no deben depender de datos globales sin ownership.
 
-## 7. Orden de implementación propuesto
+## 7. Plan de implementación por slices
 
-1. **Schema + seed/migración de usuario**: agregar `User`, `userId`, relaciones e índices scoped; crear usuario inicial/demo y backfill de datos existentes.
-2. **Auth endpoints + middleware de sesión**: implementar login/logout/session, cookie/session strategy y `currentUser`.
-3. **Ownership por módulo**: aplicar filtros y validaciones por `userId` en dashboard, cuentas, movimientos, categorías, metas y compromisos.
-4. **Login gate Web**: agregar consulta de sesión, pantalla de login, logout y requests con credenciales.
-5. **Import/seed updates**: exigir usuario destino en importación real y asegurar seed demo con ownership.
-6. **Verificación y envs de despliegue**: configurar secretos, cookies, CORS y ejecutar pruebas de aislamiento.
+Este plan define el orden de trabajo. No implica que las capacidades ya estén implementadas.
+
+1. **Schema + seed con ownership**: agregar `User`, `userId`, relaciones e índices scoped; crear usuario inicial/demo y preparar backfill controlado.
+2. **Auth core API**: implementar login/logout/session, JWT firmado en cookie HTTP-only, `argon2id` y middleware `currentUser`.
+3. **Ownership en cuentas + Quick Entry**: aplicar scoping en cuentas, opciones de ingreso rápido y creación de movimientos desde Quick Entry.
+4. **Ownership en transacciones/movimientos**: aislar listados, edición, eliminación, transferencias internas y validaciones cruzadas.
+5. **Dashboard, metas y compromisos**: aplicar ownership a cálculos agregados, metas, plantillas recurrentes, compromisos, pago y reversa.
+6. **Importador y backfill controlado**: exigir `INITIAL_USER_EMAIL`, validar conteos aprobados y asignar datos existentes al usuario inicial sin exponer detalles sensibles.
+7. **Login gate Web + logout**: bloquear acceso sin sesión, manejar expiración/`401`, enviar cookies y exponer logout.
+8. **Hardening de config/deploy**: documentar variables, cookies, CORS, HTTPS, TTL y checklist de no deploy público hasta verificar auth + ownership.
 
 ## 8. Riesgos y decisiones abiertas
 
 | Tema | Estado |
 |---|---|
-| Session storage/JWT vs cookie signed session | Abierto. Elegir antes de implementar middleware. |
-| Librería de hashing | Abierto. Definir entre alternativas como `bcrypt`, `argon2` u otra opción compatible con el runtime/deploy. |
+| Estrategia de sesión | Cerrado: JWT firmado en cookie HTTP-only. Falta implementación. |
+| Hash de contraseña | Cerrado: `argon2id`. Falta implementación y elección de librería compatible. |
+| Usuario inicial/backfill | Cerrado: `INITIAL_USER_EMAIL` es la fuente para resolver el usuario inicial y destino de backfill. |
 | Render/Cloudflare cookie/CORS | Abierto. Cloudflare Pages + Render son razonables más adelante; validar dominios, `sameSite`, `secure`, HTTPS y orígenes permitidos. |
-| Migración de datos locales ya importados | Abierto. Ya existe backup local y conteos post-importación; falta definir usuario destino y backfill con ownership. |
+| Migración de datos locales ya importados | Parcialmente cerrado. Usuario destino vía `INITIAL_USER_EMAIL`; falta ejecutar backfill con ownership y validar conteos aprobados. |
 | TTL y renovación de sesión | Abierto. Definir duración y comportamiento al expirar. |
 
 ## 9. Checklist de aceptación
@@ -213,7 +226,8 @@ El seed debe crear un usuario demo y asociar toda la data demo a ese usuario. Lo
 - [ ] Existe modelo `User` con `email`, `passwordHash`, `displayName?`, `createdAt` y `updatedAt`.
 - [ ] `Account`, `Category`, `Transaction`, `CommitmentTemplate`, `Commitment` y `Goal` tienen `userId` obligatorio.
 - [ ] Las constraints únicas relevantes están scoped por usuario.
-- [ ] Login, logout y session endpoints funcionan.
+- [ ] Login, logout y session endpoints funcionan con JWT firmado en cookie HTTP-only.
+- [ ] Las contraseñas se almacenan con `argon2id`.
 - [ ] Requests sin sesión reciben `401`.
 - [ ] Todos los handlers usan `currentUser.id`, no `userId` enviado por cliente.
 - [ ] Lecturas y escrituras quedan aisladas por usuario.
@@ -221,7 +235,7 @@ El seed debe crear un usuario demo y asociar toda la data demo a ese usuario. Lo
 - [ ] Web bloquea acceso sin sesión y permite logout.
 - [ ] Web envía cookies/credenciales en requests autenticados.
 - [ ] Web maneja expiración de sesión sin romper el flujo.
-- [ ] Migración/backfill asigna datos existentes al usuario inicial correcto.
+- [ ] Migración/backfill asigna datos existentes al usuario resuelto por `INITIAL_USER_EMAIL`.
 - [ ] Importador real exige o resuelve usuario destino.
 - [ ] Seed demo crea datos asociados a un usuario demo.
 - [ ] Variables de entorno de auth/cookies/CORS están documentadas para deploy.
