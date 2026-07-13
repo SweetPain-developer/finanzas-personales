@@ -49,7 +49,7 @@ describe("getMovements", () => {
       }),
     ]);
 
-    const result = await getMovements({ month: "2026-07" }, { today: new Date("2026-07-05T00:00:00.000Z") });
+    const result = await getMovements("user-demo", { month: "2026-07" }, { today: new Date("2026-07-05T00:00:00.000Z") });
 
     expect(result.currentMonth).toBe("2026-07");
     expect(result.groups).toHaveLength(2);
@@ -65,9 +65,11 @@ describe("getMovements", () => {
     });
     expect(findManyTransactions).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { fecha: { gte: new Date("2026-07-01T00:00:00.000Z"), lt: new Date("2026-08-01T00:00:00.000Z") } },
+        where: { userId: "user-demo", fecha: { gte: new Date("2026-07-01T00:00:00.000Z"), lt: new Date("2026-08-01T00:00:00.000Z") } },
       }),
     );
+    expect(findManyAccounts).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true, userId: "user-demo" } }));
+    expect(findManyCategories).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-demo" } }));
   });
 
   it("fuses transfer pairs with the same transferId into one movement", async () => {
@@ -97,7 +99,7 @@ describe("getMovements", () => {
       }),
     ]);
 
-    const result = await getMovements({ month: "2026-07" });
+    const result = await getMovements("user-demo", { month: "2026-07" });
 
     expect(result.groups[0]?.movements).toEqual([
       expect.objectContaining({
@@ -134,7 +136,7 @@ describe("getMovements", () => {
       }),
     ]);
 
-    const result = await getMovements({ month: "2026-07", accountId: "account-demo-wallet" });
+    const result = await getMovements("user-demo", { month: "2026-07", accountId: "account-demo-wallet" });
 
     expect(result.groups[0]?.movements[0]).toMatchObject({ tipo: "TRANSFERENCIA", toAccount: { id: "account-demo-wallet" } });
   });
@@ -178,14 +180,27 @@ describe("getMovements", () => {
       }),
     ]);
 
-    const result = await getMovements({ month: "2026-07", categoryId: "category-food" });
+    const result = await getMovements("user-demo", { month: "2026-07", categoryId: "category-food" });
 
     expect(result.groups[0]?.movements).toEqual([expect.objectContaining({ id: "tx-food", tipo: "GASTO" })]);
   });
 
   it("rejects invalid month values", async () => {
-    await expect(getMovements({ month: "2026-13" })).rejects.toThrow(MovementValidationError);
+    await expect(getMovements("user-demo", { month: "2026-13" })).rejects.toThrow(MovementValidationError);
     expect(findManyTransactions).not.toHaveBeenCalled();
+  });
+
+  it("filters movement reads and filter options by the current user", async () => {
+    mockFilters();
+    findManyTransactions.mockResolvedValueOnce([]);
+
+    await getMovements("user-owner", { month: "2026-07" });
+
+    expect(findManyAccounts).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true, userId: "user-owner" } }));
+    expect(findManyCategories).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-owner" } }));
+    expect(findManyTransactions).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: "user-owner" }),
+    }));
   });
 });
 

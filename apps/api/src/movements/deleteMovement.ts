@@ -2,6 +2,20 @@ import { TransactionType, type Prisma, type Transaction } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+type OwnedTransactionOperations = {
+  findFirst(args: { where: { id: string; userId: string } }): Promise<Transaction | null>;
+  findMany(args: { where: { transferId: string; userId: string }; orderBy: { tipo: "asc" } }): Promise<Transaction[]>;
+  deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
+};
+
+type OwnedAccountOperations = {
+  findMany(args: {
+    where: { id: { in: string[] }; userId: string };
+    select: { id: true };
+  }): Promise<Array<{ id: string }>>;
+  updateMany(args: { where: { id: string; userId: string }; data: { saldo: { increment: number } } }): Promise<{ count: number }>;
+};
+
 export class MovementDeleteNotFoundError extends Error {
   constructor(message = "Movement not found.") {
     super(message);
@@ -16,13 +30,14 @@ export class MovementDeleteConflictError extends Error {
   }
 }
 
-export async function deleteMovement(id: string): Promise<void> {
+export async function deleteMovement(id: string, userId: string): Promise<void> {
   try {
     await prisma.$transaction(async (tx) => {
-      const existing = await tx.transaction.findUnique({ where: { id } });
+      const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
+      const existing = await transactionOperations.findFirst({ where: { id, userId } });
 
       if (!existing) {
-        await deleteTransferMovement(tx, id, null);
+        await deleteTransferMovement(tx, id, null, userId);
         return;
       }
 
@@ -31,13 +46,14 @@ export async function deleteMovement(id: string): Promise<void> {
           throw new MovementDeleteConflictError("Transfer pair is invalid. Please reload and try again.");
         }
 
-        await deleteTransferMovement(tx, id, existing);
+        await deleteTransferMovement(tx, id, existing, userId);
         return;
       }
 
-      const guardedDelete = await tx.transaction.deleteMany({
+      const guardedDelete = await transactionOperations.deleteMany({
         where: {
           id,
+          userId,
           tipo: existing.tipo,
           monto: existing.monto,
           accountId: existing.accountId,
@@ -51,7 +67,7 @@ export async function deleteMovement(id: string): Promise<void> {
         throw new MovementDeleteConflictError("Movement changed while deleting. Please reload and try again.");
       }
 
-      await reverseBalanceEffect(tx, existing);
+      await reverseBalanceEffect(tx, existing, userId);
     }, { isolationLevel: "Serializable" });
   } catch (error) {
     if (isPrismaTransactionConflictError(error)) {
@@ -62,18 +78,17 @@ export async function deleteMovement(id: string): Promise<void> {
   }
 }
 
-async function reverseBalanceEffect(tx: Prisma.TransactionClient, movement: Transaction) {
+async function reverseBalanceEffect(tx: Prisma.TransactionClient, movement: Transaction, userId: string) {
   const reverseEffect = movement.tipo === TransactionType.INGRESO ? -movement.monto : movement.monto;
 
-  await tx.account.update({
-    where: { id: movement.accountId },
-    data: { saldo: { increment: reverseEffect } },
-  });
+  await updateOwnedAccountBalance(tx, movement.accountId, userId, reverseEffect);
 }
 
-async function deleteTransferMovement(tx: Prisma.TransactionClient, id: string, selectedMovement: Transaction | null) {
+async function deleteTransferMovement(tx: Prisma.TransactionClient, id: string, selectedMovement: Transaction | null, userId: string) {
   const transferId = selectedMovement?.transferId ?? id;
-  const pair = await tx.transaction.findMany({ where: { transferId }, orderBy: { tipo: "asc" } });
+  const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
+  const accountOperations = tx.account as unknown as OwnedAccountOperations;
+  const pair = await transactionOperations.findMany({ where: { transferId, userId }, orderBy: { tipo: "asc" } });
 
   if (pair.length === 0) {
     throw new MovementDeleteNotFoundError();
@@ -86,8 +101,8 @@ async function deleteTransferMovement(tx: Prisma.TransactionClient, id: string, 
     throw new MovementDeleteConflictError("Transfer pair is invalid. Please reload and try again.");
   }
 
-  const accounts = await tx.account.findMany({
-    where: { id: { in: [salida.accountId, entrada.accountId] } },
+  const accounts = await accountOperations.findMany({
+    where: { id: { in: [salida.accountId, entrada.accountId] }, userId },
     select: { id: true },
   });
 
@@ -95,9 +110,10 @@ async function deleteTransferMovement(tx: Prisma.TransactionClient, id: string, 
     throw new MovementDeleteConflictError("Transfer pair references invalid accounts. Please reload and try again.");
   }
 
-  const guardedDelete = await tx.transaction.deleteMany({
+  const guardedDelete = await transactionOperations.deleteMany({
     where: {
       transferId,
+      userId,
       OR: [
         { id: salida.id, tipo: salida.tipo, monto: salida.monto, accountId: salida.accountId, categoryId: null, updatedAt: salida.updatedAt },
         { id: entrada.id, tipo: entrada.tipo, monto: entrada.monto, accountId: entrada.accountId, categoryId: null, updatedAt: entrada.updatedAt },
@@ -109,8 +125,20 @@ async function deleteTransferMovement(tx: Prisma.TransactionClient, id: string, 
     throw new MovementDeleteConflictError();
   }
 
-  await tx.account.update({ where: { id: salida.accountId }, data: { saldo: { increment: salida.monto } } });
-  await tx.account.update({ where: { id: entrada.accountId }, data: { saldo: { increment: -entrada.monto } } });
+  await updateOwnedAccountBalance(tx, salida.accountId, userId, salida.monto);
+  await updateOwnedAccountBalance(tx, entrada.accountId, userId, -entrada.monto);
+}
+
+async function updateOwnedAccountBalance(tx: Prisma.TransactionClient, accountId: string, userId: string, increment: number) {
+  const accountOperations = tx.account as unknown as OwnedAccountOperations;
+  const updated = await accountOperations.updateMany({
+    where: { id: accountId, userId },
+    data: { saldo: { increment } },
+  });
+
+  if (updated.count !== 1) {
+    throw new MovementDeleteConflictError("Movement references an account that is no longer available. Please reload and try again.");
+  }
 }
 
 function hasConsistentTransferPair(salida: Transaction, entrada: Transaction) {

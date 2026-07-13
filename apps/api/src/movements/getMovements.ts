@@ -67,6 +67,30 @@ type MovementOptions = {
   today?: Date;
 };
 
+const movementReader = prisma as unknown as {
+  account: {
+    findMany(args: {
+      where: { activa: true; userId: string };
+      select: { id: true; nombre: true };
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    }): Promise<MovementAccount[]>;
+  };
+  category: {
+    findMany(args: {
+      where: { userId: string };
+      select: { id: true; nombre: true; icono: true; tipo: true };
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    }): Promise<MovementCategory[]>;
+  };
+  transaction: {
+    findMany(args: {
+      where: { userId: string; fecha: { gte: Date; lt: Date } };
+      include: { account: { select: { id: true; nombre: true } }; category: true };
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    }): Promise<TransactionWithRelations[]>;
+  };
+};
+
 const DEFAULT_MONTH = "2026-07";
 const MONTH_FORMAT = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -83,21 +107,23 @@ export class MovementValidationError extends Error {
   }
 }
 
-export async function getMovements(filters: MovementFilters = {}, options: MovementOptions = {}): Promise<MovementsData> {
+export async function getMovements(userId: string, filters: MovementFilters = {}, options: MovementOptions = {}): Promise<MovementsData> {
   const monthRange = parseMovementMonth(filters.month ?? DEFAULT_MONTH);
 
   const [accounts, categories, transactions] = await Promise.all([
-    prisma.account.findMany({
-      where: { activa: true },
+    movementReader.account.findMany({
+      where: { activa: true, userId },
       select: { id: true, nombre: true },
       orderBy: [{ orden: "asc" }, { nombre: "asc" }],
     }),
-    prisma.category.findMany({
+    movementReader.category.findMany({
+      where: { userId },
       select: { id: true, nombre: true, icono: true, tipo: true },
       orderBy: [{ orden: "asc" }, { nombre: "asc" }],
     }),
-    prisma.transaction.findMany({
+    movementReader.transaction.findMany({
       where: {
+        userId,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
       include: { account: { select: { id: true, nombre: true } }, category: true },

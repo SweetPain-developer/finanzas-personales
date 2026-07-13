@@ -11,7 +11,7 @@ vi.mock("../prisma.js", () => {
       update: vi.fn(),
     },
     category: {
-      findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     transaction: {
       create: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock("../prisma.js", () => {
 const runTransaction = prisma.$transaction as Mock;
 const findFirstAccount = prisma.account.findFirst as Mock;
 const updateAccount = prisma.account.update as Mock;
-const findUniqueCategory = prisma.category.findUnique as Mock;
+const findFirstCategory = prisma.category.findFirst as Mock;
 const createPrismaTransaction = prisma.transaction.create as Mock;
 
 describe("createTransaction", () => {
@@ -37,7 +37,7 @@ describe("createTransaction", () => {
     runTransaction.mockClear();
     findFirstAccount.mockReset();
     updateAccount.mockReset();
-    findUniqueCategory.mockReset();
+    findFirstCategory.mockReset();
     createPrismaTransaction.mockReset();
   });
 
@@ -47,7 +47,7 @@ describe("createTransaction", () => {
 
   it("creates an expense and subtracts the account balance", async () => {
     findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
     createPrismaTransaction.mockResolvedValueOnce(transaction({ id: "tx-expense", tipo: TransactionType.GASTO }));
 
     const result = await createTransaction({
@@ -56,7 +56,8 @@ describe("createTransaction", () => {
       accountId: "account-checking",
       categoryId: "category-food",
       fecha: "2026-07-05T12:00:00.000Z",
-    });
+      userId: "attacker-user",
+    }, "user-demo");
 
     expect(result).toHaveLength(1);
     expect(updateAccount).toHaveBeenCalledWith({
@@ -71,13 +72,16 @@ describe("createTransaction", () => {
         accountId: "account-checking",
         categoryId: "category-food",
         transferId: null,
+        userId: "user-demo",
       }),
     });
+    expect(findFirstAccount).toHaveBeenCalledWith({ where: { id: "account-checking", activa: true, userId: "user-demo" } });
+    expect(findFirstCategory).toHaveBeenCalledWith({ where: { id: "category-food", userId: "user-demo" } });
   });
 
   it("creates income and adds the account balance", async () => {
     findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-salary", nombre: "Salary", tipo: CategoryType.INGRESO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-salary", nombre: "Salary", tipo: CategoryType.INGRESO }));
     createPrismaTransaction.mockResolvedValueOnce(transaction({ id: "tx-income", tipo: TransactionType.INGRESO }));
 
     const result = await createTransaction({
@@ -86,7 +90,7 @@ describe("createTransaction", () => {
       accountId: "account-checking",
       categoryId: "category-salary",
       descripcion: "July salary",
-    });
+    }, "user-demo");
 
     expect(result).toHaveLength(1);
     expect(updateAccount).toHaveBeenCalledWith({
@@ -107,7 +111,7 @@ describe("createTransaction", () => {
     vi.useFakeTimers();
     vi.setSystemTime(now);
     findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-salary", nombre: "Salary", tipo: CategoryType.INGRESO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-salary", nombre: "Salary", tipo: CategoryType.INGRESO }));
     createPrismaTransaction.mockResolvedValueOnce(transaction({ id: "tx-income", tipo: TransactionType.INGRESO }));
 
     await createTransaction({
@@ -115,7 +119,7 @@ describe("createTransaction", () => {
       monto: 900_000,
       accountId: "account-checking",
       categoryId: "category-salary",
-    });
+    }, "user-demo");
 
     expect(createPrismaTransaction).toHaveBeenCalledWith({
       data: expect.objectContaining({ fecha: now }),
@@ -124,7 +128,7 @@ describe("createTransaction", () => {
 
   it("keeps date-only ISO values at the exact requested calendar day", async () => {
     findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
     createPrismaTransaction.mockResolvedValueOnce(transaction({ id: "tx-expense", tipo: TransactionType.GASTO }));
 
     await createTransaction({
@@ -133,7 +137,7 @@ describe("createTransaction", () => {
       accountId: "account-checking",
       categoryId: "category-food",
       fecha: "2026-07-05",
-    });
+    }, "user-demo");
 
     expect(createPrismaTransaction).toHaveBeenCalledWith({
       data: expect.objectContaining({ fecha: new Date("2026-07-05T00:00:00.000Z") }),
@@ -154,7 +158,8 @@ describe("createTransaction", () => {
       fromAccountId: "account-origin",
       toAccountId: "account-destination",
       fecha: "2026-07-05T12:00:00.000Z",
-    });
+      userId: "attacker-user",
+    }, "user-demo");
 
     expect(result).toHaveLength(2);
     expect(result[0]?.transferId).toEqual(expect.any(String));
@@ -173,6 +178,7 @@ describe("createTransaction", () => {
         accountId: "account-origin",
         categoryId: null,
         transferId: result[0]?.transferId,
+        userId: "user-demo",
       }),
     });
     expect(createPrismaTransaction).toHaveBeenNthCalledWith(2, {
@@ -181,12 +187,15 @@ describe("createTransaction", () => {
         accountId: "account-destination",
         categoryId: null,
         transferId: result[0]?.transferId,
+        userId: "user-demo",
       }),
     });
+    expect(findFirstAccount).toHaveBeenNthCalledWith(1, { where: { id: "account-origin", activa: true, userId: "user-demo" } });
+    expect(findFirstAccount).toHaveBeenNthCalledWith(2, { where: { id: "account-destination", activa: true, userId: "user-demo" } });
   });
 
   it("rejects invalid amounts before opening a database transaction", async () => {
-    await expect(createTransaction({ tipo: "GASTO", monto: 10.5 })).rejects.toThrow(TransactionValidationError);
+    await expect(createTransaction({ tipo: "GASTO", monto: 10.5 }, "user-demo")).rejects.toThrow(TransactionValidationError);
 
     expect(runTransaction).not.toHaveBeenCalled();
   });
@@ -199,7 +208,7 @@ describe("createTransaction", () => {
         accountId: "account-checking",
         categoryId: "category-food",
         fecha: "2026-02-31",
-      }),
+      }, "user-demo"),
     ).rejects.toThrow("Invalid date.");
 
     expect(runTransaction).not.toHaveBeenCalled();
@@ -213,7 +222,7 @@ describe("createTransaction", () => {
         accountId: "account-checking",
         categoryId: "category-food",
         fecha: "2026-02-31T12:00:00.000Z",
-      }),
+      }, "user-demo"),
     ).rejects.toThrow("Invalid date.");
 
     expect(runTransaction).not.toHaveBeenCalled();
@@ -229,7 +238,7 @@ describe("createTransaction", () => {
           accountId: "account-checking",
           categoryId: "category-food",
           fecha,
-        }),
+        }, "user-demo"),
       ).rejects.toThrow("Invalid date.");
 
       expect(runTransaction).not.toHaveBeenCalled();
@@ -238,10 +247,10 @@ describe("createTransaction", () => {
 
   it("rejects missing or inactive accounts", async () => {
     findFirstAccount.mockResolvedValueOnce(null);
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
 
     await expect(
-      createTransaction({ tipo: "GASTO", monto: 1_000, accountId: "missing", categoryId: "category-food" }),
+      createTransaction({ tipo: "GASTO", monto: 1_000, accountId: "missing", categoryId: "category-food" }, "user-demo"),
     ).rejects.toThrow("Account not found or inactive.");
 
     expect(createPrismaTransaction).not.toHaveBeenCalled();
@@ -249,19 +258,45 @@ describe("createTransaction", () => {
 
   it("rejects category type mismatches", async () => {
     findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
-    findUniqueCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
+    findFirstCategory.mockResolvedValueOnce(category({ id: "category-food", nombre: "Food", tipo: CategoryType.GASTO }));
 
     await expect(
-      createTransaction({ tipo: "INGRESO", monto: 1_000, accountId: "account-checking", categoryId: "category-food" }),
+      createTransaction({ tipo: "INGRESO", monto: 1_000, accountId: "account-checking", categoryId: "category-food" }, "user-demo"),
     ).rejects.toThrow("Category type does not match transaction type.");
   });
 
   it("rejects transfers between the same account", async () => {
     await expect(
-      createTransaction({ tipo: "TRANSFERENCIA", monto: 1_000, fromAccountId: "same", toAccountId: "same" }),
+      createTransaction({ tipo: "TRANSFERENCIA", monto: 1_000, fromAccountId: "same", toAccountId: "same" }, "user-demo"),
     ).rejects.toThrow("Transfer accounts must be different.");
 
     expect(runTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects categories that do not belong to the current user", async () => {
+    findFirstAccount.mockResolvedValueOnce(account({ id: "account-checking" }));
+    findFirstCategory.mockResolvedValueOnce(null);
+
+    await expect(
+      createTransaction({ tipo: "GASTO", monto: 1_000, accountId: "account-checking", categoryId: "other-user-category" }, "user-demo"),
+    ).rejects.toThrow("Category not found.");
+
+    expect(findFirstCategory).toHaveBeenCalledWith({ where: { id: "other-user-category", userId: "user-demo" } });
+    expect(createPrismaTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects transfers when one account does not belong to the current user", async () => {
+    findFirstAccount
+      .mockResolvedValueOnce(account({ id: "account-origin" }))
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      createTransaction({ tipo: "TRANSFERENCIA", monto: 1_000, fromAccountId: "account-origin", toAccountId: "other-user-account" }, "user-demo"),
+    ).rejects.toThrow("Destination account not found or inactive.");
+
+    expect(findFirstAccount).toHaveBeenNthCalledWith(1, { where: { id: "account-origin", activa: true, userId: "user-demo" } });
+    expect(findFirstAccount).toHaveBeenNthCalledWith(2, { where: { id: "other-user-account", activa: true, userId: "user-demo" } });
+    expect(createPrismaTransaction).not.toHaveBeenCalled();
   });
 });
 

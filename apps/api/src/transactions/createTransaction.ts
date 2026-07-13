@@ -24,6 +24,18 @@ type TransferInput = {
 
 type CreateTransactionInput = ExpenseOrIncomeInput | TransferInput;
 
+type TransactionClientWithOwnership = Prisma.TransactionClient & {
+  account: Prisma.TransactionClient["account"] & {
+    findFirst(args: { where: { id: string; activa: true; userId: string } }): Promise<{ id: string } | null>;
+  };
+  category: Prisma.TransactionClient["category"] & {
+    findFirst(args: { where: { id: string; userId: string } }): Promise<{ id: string; nombre: string; tipo: TransactionType | string } | null>;
+  };
+  transaction: Prisma.TransactionClient["transaction"] & {
+    create(args: { data: Record<string, unknown> }): Promise<Transaction>;
+  };
+};
+
 export class TransactionValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -31,16 +43,18 @@ export class TransactionValidationError extends Error {
   }
 }
 
-export async function createTransaction(payload: unknown): Promise<Transaction[]> {
+export async function createTransaction(payload: unknown, userId: string): Promise<Transaction[]> {
   const input = parseCreateTransactionInput(payload);
   const fecha = parseTransactionDate(input.fecha);
 
   return prisma.$transaction(async (tx) => {
+    const ownedTx = tx as TransactionClientWithOwnership;
+
     if (input.tipo === "TRANSFERENCIA") {
-      return createTransfer(tx, input, fecha);
+      return createTransfer(ownedTx, input, fecha, userId);
     }
 
-    return [await createExpenseOrIncome(tx, input, fecha)];
+    return [await createExpenseOrIncome(ownedTx, input, fecha, userId)];
   });
 }
 
@@ -86,13 +100,14 @@ function parseCreateTransactionInput(payload: unknown): CreateTransactionInput {
 }
 
 async function createExpenseOrIncome(
-  tx: Prisma.TransactionClient,
+  tx: TransactionClientWithOwnership,
   input: ExpenseOrIncomeInput,
   fecha: Date,
+  userId: string,
 ): Promise<Transaction> {
   const [account, category] = await Promise.all([
-    tx.account.findFirst({ where: { id: input.accountId, activa: true } }),
-    tx.category.findUnique({ where: { id: input.categoryId } }),
+    tx.account.findFirst({ where: { id: input.accountId, activa: true, userId } }),
+    tx.category.findFirst({ where: { id: input.categoryId, userId } }),
   ]);
 
   if (!account) {
@@ -123,14 +138,15 @@ async function createExpenseOrIncome(
       accountId: input.accountId,
       categoryId: input.categoryId,
       transferId: null,
+      userId,
     },
   });
 }
 
-async function createTransfer(tx: Prisma.TransactionClient, input: TransferInput, fecha: Date): Promise<Transaction[]> {
+async function createTransfer(tx: TransactionClientWithOwnership, input: TransferInput, fecha: Date, userId: string): Promise<Transaction[]> {
   const [fromAccount, toAccount] = await Promise.all([
-    tx.account.findFirst({ where: { id: input.fromAccountId, activa: true } }),
-    tx.account.findFirst({ where: { id: input.toAccountId, activa: true } }),
+    tx.account.findFirst({ where: { id: input.fromAccountId, activa: true, userId } }),
+    tx.account.findFirst({ where: { id: input.toAccountId, activa: true, userId } }),
   ]);
 
   if (!fromAccount) {
@@ -162,6 +178,7 @@ async function createTransfer(tx: Prisma.TransactionClient, input: TransferInput
       accountId: input.fromAccountId,
       categoryId: null,
       transferId,
+      userId,
     },
   });
   const entrada = await tx.transaction.create({
@@ -173,6 +190,7 @@ async function createTransfer(tx: Prisma.TransactionClient, input: TransferInput
       accountId: input.toAccountId,
       categoryId: null,
       transferId,
+      userId,
     },
   });
 

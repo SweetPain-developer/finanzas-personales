@@ -22,6 +22,25 @@ type UpdateTransferInput = {
 
 type ParsedUpdateInput = UpdateMovementInput | UpdateTransferInput;
 
+type TransactionClientWithOwnership = Prisma.TransactionClient & {
+  account: Prisma.TransactionClient["account"] & {
+    findFirst(args: { where: { id: string; activa: true; userId: string } }): Promise<{ id: string } | null>;
+  };
+  category: Prisma.TransactionClient["category"] & {
+    findFirst(args: { where: { id: string; userId: string } }): Promise<{ id: string; nombre: string; tipo: TransactionType | string } | null>;
+  };
+};
+
+type OwnedTransactionOperations = {
+  findFirst(args: { where: { id: string; userId: string } }): Promise<Transaction | null>;
+  findMany(args: { where: { transferId: string; userId: string }; orderBy: { tipo: "asc" } }): Promise<Transaction[]>;
+  updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
+};
+
+type OwnedAccountBalanceOperations = {
+  updateMany(args: { where: { id: string; userId: string }; data: { saldo: { increment: number } } }): Promise<{ count: number }>;
+};
+
 export class MovementUpdateNotFoundError extends Error {
   constructor(message = "Movement not found.") {
     super(message);
@@ -43,16 +62,18 @@ export class MovementUpdateValidationError extends Error {
   }
 }
 
-export async function updateMovement(id: string, payload: unknown): Promise<Transaction | Transaction[]> {
+export async function updateMovement(id: string, payload: unknown, userId: string): Promise<Transaction | Transaction[]> {
   const input = parseUpdateInput(payload);
   const fecha = parseMovementDate(input.fecha);
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const existing = await tx.transaction.findUnique({ where: { id } });
+      const ownedTx = tx as TransactionClientWithOwnership;
+      const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
+      const existing = await transactionOperations.findFirst({ where: { id, userId } });
 
       if (input.tipo === "TRANSFERENCIA" || (existing !== null && (existing.transferId !== null || existing.categoryId === null))) {
-        return updateTransferMovement(tx, id, existing, input, fecha);
+        return updateTransferMovement(ownedTx, id, existing, input, fecha, userId);
       }
 
       if (!existing) {
@@ -60,8 +81,8 @@ export async function updateMovement(id: string, payload: unknown): Promise<Tran
       }
 
       const [account, category] = await Promise.all([
-        tx.account.findFirst({ where: { id: input.accountId, activa: true } }),
-        tx.category.findUnique({ where: { id: input.categoryId } }),
+        ownedTx.account.findFirst({ where: { id: input.accountId, activa: true, userId } }),
+        ownedTx.category.findFirst({ where: { id: input.categoryId, userId } }),
       ]);
 
       if (!account) {
@@ -76,9 +97,10 @@ export async function updateMovement(id: string, payload: unknown): Promise<Tran
         throw new MovementUpdateValidationError("Category type does not match movement type.");
       }
 
-      const guardedUpdate = await tx.transaction.updateMany({
+      const guardedUpdate = await transactionOperations.updateMany({
         where: {
           id,
+          userId,
           tipo: existing.tipo,
           monto: existing.monto,
           accountId: existing.accountId,
@@ -100,9 +122,9 @@ export async function updateMovement(id: string, payload: unknown): Promise<Tran
         throw new MovementUpdateConflictError("Movement changed while editing. Please reload and try again.");
       }
 
-      await adjustBalances(tx, existing, input);
+      await adjustBalances(tx, existing, input, userId);
 
-      const updated = await tx.transaction.findUnique({ where: { id } });
+      const updated = await transactionOperations.findFirst({ where: { id, userId } });
 
       if (!updated) {
         throw new MovementUpdateNotFoundError();
@@ -120,18 +142,20 @@ export async function updateMovement(id: string, payload: unknown): Promise<Tran
 }
 
 async function updateTransferMovement(
-  tx: Prisma.TransactionClient,
+  tx: TransactionClientWithOwnership,
   id: string,
   selectedMovement: Transaction | null,
   input: ParsedUpdateInput,
   fecha: Date,
+  userId: string,
 ): Promise<Transaction[]> {
   if (input.tipo !== "TRANSFERENCIA") {
     throw new MovementUpdateConflictError("Transfer movements must be edited as transfers.");
   }
 
   const transferId = selectedMovement?.transferId ?? id;
-  const pair = await tx.transaction.findMany({ where: { transferId }, orderBy: { tipo: "asc" } });
+  const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
+  const pair = await transactionOperations.findMany({ where: { transferId, userId }, orderBy: { tipo: "asc" } });
 
   if (pair.length === 0) {
     throw new MovementUpdateNotFoundError();
@@ -149,8 +173,8 @@ async function updateTransferMovement(
   }
 
   const [fromAccount, toAccount] = await Promise.all([
-    tx.account.findFirst({ where: { id: input.fromAccountId, activa: true } }),
-    tx.account.findFirst({ where: { id: input.toAccountId, activa: true } }),
+    tx.account.findFirst({ where: { id: input.fromAccountId, activa: true, userId } }),
+    tx.account.findFirst({ where: { id: input.toAccountId, activa: true, userId } }),
   ]);
 
   if (!fromAccount) {
@@ -162,9 +186,10 @@ async function updateTransferMovement(
   }
 
   const descripcion = normalizeDescription(input.descripcion, "Transferencia");
-  const guardedUpdate = await tx.transaction.updateMany({
+  const guardedUpdate = await transactionOperations.updateMany({
     where: {
       transferId,
+      userId,
       OR: [
         { id: salida.id, tipo: salida.tipo, monto: salida.monto, accountId: salida.accountId, categoryId: null, updatedAt: salida.updatedAt },
         { id: entrada.id, tipo: entrada.tipo, monto: entrada.monto, accountId: entrada.accountId, categoryId: null, updatedAt: entrada.updatedAt },
@@ -179,35 +204,26 @@ async function updateTransferMovement(
 
   await tx.transaction.update({ where: { id: salida.id }, data: { accountId: input.fromAccountId } });
   await tx.transaction.update({ where: { id: entrada.id }, data: { accountId: input.toAccountId } });
-  await adjustTransferBalances(tx, salida, entrada, input);
+  await adjustTransferBalances(tx, salida, entrada, input, userId);
 
-  return tx.transaction.findMany({ where: { transferId }, orderBy: { tipo: "asc" } });
+  return transactionOperations.findMany({ where: { transferId, userId }, orderBy: { tipo: "asc" } });
 }
 
 function isPrismaTransactionConflictError(error: unknown) {
   return isRecord(error) && error.code === "P2034";
 }
 
-async function adjustBalances(tx: Prisma.TransactionClient, existing: Transaction, input: UpdateMovementInput) {
+async function adjustBalances(tx: Prisma.TransactionClient, existing: Transaction, input: UpdateMovementInput, userId: string) {
   const reverseOldEffect = existing.tipo === TransactionType.INGRESO ? -existing.monto : existing.monto;
   const applyNewEffect = input.tipo === "INGRESO" ? input.monto : -input.monto;
 
   if (existing.accountId === input.accountId) {
-    await tx.account.update({
-      where: { id: existing.accountId },
-      data: { saldo: { increment: reverseOldEffect + applyNewEffect } },
-    });
+    await updateOwnedAccountBalance(tx, existing.accountId, userId, reverseOldEffect + applyNewEffect);
     return;
   }
 
-  await tx.account.update({
-    where: { id: existing.accountId },
-    data: { saldo: { increment: reverseOldEffect } },
-  });
-  await tx.account.update({
-    where: { id: input.accountId },
-    data: { saldo: { increment: applyNewEffect } },
-  });
+  await updateOwnedAccountBalance(tx, existing.accountId, userId, reverseOldEffect);
+  await updateOwnedAccountBalance(tx, input.accountId, userId, applyNewEffect);
 }
 
 function parseUpdateInput(payload: unknown): ParsedUpdateInput {
@@ -260,6 +276,7 @@ async function adjustTransferBalances(
   salida: Transaction,
   entrada: Transaction,
   input: UpdateTransferInput,
+  userId: string,
 ) {
   const deltas = new Map<string, number>();
   addBalanceDelta(deltas, salida.accountId, salida.monto);
@@ -269,8 +286,20 @@ async function adjustTransferBalances(
 
   for (const [accountId, delta] of deltas) {
     if (delta !== 0) {
-      await tx.account.update({ where: { id: accountId }, data: { saldo: { increment: delta } } });
+      await updateOwnedAccountBalance(tx, accountId, userId, delta);
     }
+  }
+}
+
+async function updateOwnedAccountBalance(tx: Prisma.TransactionClient, accountId: string, userId: string, increment: number) {
+  const accountOperations = tx.account as unknown as OwnedAccountBalanceOperations;
+  const updated = await accountOperations.updateMany({
+    where: { id: accountId, userId },
+    data: { saldo: { increment } },
+  });
+
+  if (updated.count !== 1) {
+    throw new MovementUpdateConflictError("Movement references an account that is no longer available. Please reload and try again.");
   }
 }
 

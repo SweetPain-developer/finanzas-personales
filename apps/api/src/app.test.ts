@@ -1217,10 +1217,11 @@ describe("GET /movements", () => {
 
     const response = await request(app)
       .get("/movements?month=2026-07&accountId=account-demo-primary&categoryId=category-food")
+      .set("Cookie", authCookie)
       .expect(200);
 
     expect(response.body).toEqual({ currentMonth: "2026-07", filters: { accounts: [], categories: [] }, groups: [] });
-    expect(mockedGetMovements).toHaveBeenCalledWith({
+    expect(mockedGetMovements).toHaveBeenCalledWith("user-demo", {
       month: "2026-07",
       accountId: "account-demo-primary",
       categoryId: "category-food",
@@ -1230,15 +1231,22 @@ describe("GET /movements", () => {
   it("returns 400 for invalid movement month values", async () => {
     mockedGetMovements.mockRejectedValueOnce(new MovementValidationError("Invalid month format. Use YYYY-MM."));
 
-    const response = await request(app).get("/movements?month=2026-13").expect(400);
+    const response = await request(app).get("/movements?month=2026-13").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Invalid month format. Use YYYY-MM." });
   });
 
   it("rejects repeated movement query values with 400", async () => {
-    const response = await request(app).get("/movements?accountId=a&accountId=b").expect(400);
+    const response = await request(app).get("/movements?accountId=a&accountId=b").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Repeated accountId query values are not allowed." });
+    expect(mockedGetMovements).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/movements").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
     expect(mockedGetMovements).not.toHaveBeenCalled();
   });
 });
@@ -1271,7 +1279,7 @@ describe("PATCH /movements/:id", () => {
       fecha: "2026-07-06",
     };
 
-    const response = await request(app).patch("/movements/tx-grocery").send(payload).expect(200);
+    const response = await request(app).patch("/movements/tx-grocery").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body).toMatchObject({
       movement: {
@@ -1284,7 +1292,7 @@ describe("PATCH /movements/:id", () => {
         transferId: null,
       },
     });
-    expect(mockedUpdateMovement).toHaveBeenCalledWith("tx-grocery", payload);
+    expect(mockedUpdateMovement).toHaveBeenCalledWith("tx-grocery", payload, "user-demo");
   });
 
   it("updates a transfer and returns both transfer movements in the endpoint contract", async () => {
@@ -1325,7 +1333,7 @@ describe("PATCH /movements/:id", () => {
       fecha: "2026-07-06",
     };
 
-    const response = await request(app).patch("/movements/transfer-1").send(payload).expect(200);
+    const response = await request(app).patch("/movements/transfer-1").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body).toMatchObject({
       movement: [
@@ -1349,13 +1357,13 @@ describe("PATCH /movements/:id", () => {
         },
       ],
     });
-    expect(mockedUpdateMovement).toHaveBeenCalledWith("transfer-1", payload);
+    expect(mockedUpdateMovement).toHaveBeenCalledWith("transfer-1", payload, "user-demo");
   });
 
   it("returns 404 when the movement does not exist", async () => {
     mockedUpdateMovement.mockRejectedValueOnce(new MovementUpdateNotFoundError("Movement not found."));
 
-    const response = await request(app).patch("/movements/missing").send({}).expect(404);
+    const response = await request(app).patch("/movements/missing").set("Cookie", authCookie).send({}).expect(404);
 
     expect(response.body).toEqual({ error: "Movement not found." });
   });
@@ -1363,7 +1371,7 @@ describe("PATCH /movements/:id", () => {
   it("returns 400 for invalid movement update payloads", async () => {
     mockedUpdateMovement.mockRejectedValueOnce(new MovementUpdateValidationError("Amount must be an integer greater than zero."));
 
-    const response = await request(app).patch("/movements/tx-grocery").send({ monto: 0 }).expect(400);
+    const response = await request(app).patch("/movements/tx-grocery").set("Cookie", authCookie).send({ monto: 0 }).expect(400);
 
     expect(response.body).toEqual({ error: "Amount must be an integer greater than zero." });
   });
@@ -1371,7 +1379,7 @@ describe("PATCH /movements/:id", () => {
   it("returns 409 when a transfer pair is invalid or stale", async () => {
     mockedUpdateMovement.mockRejectedValueOnce(new MovementUpdateConflictError("Transfer pair is inconsistent. Please reload and try again."));
 
-    const response = await request(app).patch("/movements/transfer-1").send({ tipo: "TRANSFERENCIA" }).expect(409);
+    const response = await request(app).patch("/movements/transfer-1").set("Cookie", authCookie).send({ tipo: "TRANSFERENCIA" }).expect(409);
 
     expect(response.body).toEqual({ error: "Transfer pair is inconsistent. Please reload and try again." });
   });
@@ -1379,9 +1387,16 @@ describe("PATCH /movements/:id", () => {
   it("returns 409 when a movement edit conflicts with another transaction", async () => {
     mockedUpdateMovement.mockRejectedValueOnce(new MovementUpdateConflictError("Movement changed while editing. Please reload and try again."));
 
-    const response = await request(app).patch("/movements/tx-grocery").send({}).expect(409);
+    const response = await request(app).patch("/movements/tx-grocery").set("Cookie", authCookie).send({}).expect(409);
 
     expect(response.body).toEqual({ error: "Movement changed while editing. Please reload and try again." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).patch("/movements/tx-grocery").send({}).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedUpdateMovement).not.toHaveBeenCalled();
   });
 });
 
@@ -1393,23 +1408,23 @@ describe("DELETE /movements/:id", () => {
   it("deletes a regular movement and returns no content", async () => {
     mockedDeleteMovement.mockResolvedValueOnce();
 
-    await request(app).delete("/movements/tx-grocery").expect(204);
+    await request(app).delete("/movements/tx-grocery").set("Cookie", authCookie).expect(204);
 
-    expect(mockedDeleteMovement).toHaveBeenCalledWith("tx-grocery");
+    expect(mockedDeleteMovement).toHaveBeenCalledWith("tx-grocery", "user-demo");
   });
 
   it("deletes a transfer movement and returns no content", async () => {
     mockedDeleteMovement.mockResolvedValueOnce();
 
-    await request(app).delete("/movements/transfer-1").expect(204);
+    await request(app).delete("/movements/transfer-1").set("Cookie", authCookie).expect(204);
 
-    expect(mockedDeleteMovement).toHaveBeenCalledWith("transfer-1");
+    expect(mockedDeleteMovement).toHaveBeenCalledWith("transfer-1", "user-demo");
   });
 
   it("returns 404 when the movement does not exist", async () => {
     mockedDeleteMovement.mockRejectedValueOnce(new MovementDeleteNotFoundError("Movement not found."));
 
-    const response = await request(app).delete("/movements/missing").expect(404);
+    const response = await request(app).delete("/movements/missing").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Movement not found." });
   });
@@ -1417,7 +1432,7 @@ describe("DELETE /movements/:id", () => {
   it("returns 409 when a transfer pair is invalid", async () => {
     mockedDeleteMovement.mockRejectedValueOnce(new MovementDeleteConflictError("Transfer pair is invalid. Please reload and try again."));
 
-    const response = await request(app).delete("/movements/transfer-1").expect(409);
+    const response = await request(app).delete("/movements/transfer-1").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Transfer pair is invalid. Please reload and try again." });
   });
@@ -1425,9 +1440,16 @@ describe("DELETE /movements/:id", () => {
   it("returns 409 when a movement delete conflicts with another transaction", async () => {
     mockedDeleteMovement.mockRejectedValueOnce(new MovementDeleteConflictError("Movement changed while deleting. Please reload and try again."));
 
-    const response = await request(app).delete("/movements/tx-grocery").expect(409);
+    const response = await request(app).delete("/movements/tx-grocery").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Movement changed while deleting. Please reload and try again." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).delete("/movements/tx-grocery").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedDeleteMovement).not.toHaveBeenCalled();
   });
 });
 
@@ -1454,7 +1476,7 @@ describe("POST /transactions", () => {
     ]);
 
     const payload = { tipo: "GASTO", monto: 1_000, accountId: "account-checking", categoryId: "category-food" };
-    const response = await request(app).post("/transactions").send(payload).expect(201);
+    const response = await request(app).post("/transactions").set("Cookie", authCookie).send(payload).expect(201);
 
     expect(response.body).toMatchObject({
       transactions: [
@@ -1469,15 +1491,22 @@ describe("POST /transactions", () => {
         },
       ],
     });
-    expect(mockedCreateTransaction).toHaveBeenCalledWith(payload);
+    expect(mockedCreateTransaction).toHaveBeenCalledWith(payload, "user-demo");
   });
 
   it("returns 400 for transaction validation errors", async () => {
     mockedCreateTransaction.mockRejectedValueOnce(new TransactionValidationError("Amount must be an integer greater than zero."));
 
-    const response = await request(app).post("/transactions").send({ tipo: "GASTO", monto: 0 }).expect(400);
+    const response = await request(app).post("/transactions").set("Cookie", authCookie).send({ tipo: "GASTO", monto: 0 }).expect(400);
 
     expect(response.body).toEqual({ error: "Amount must be an integer greater than zero." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).post("/transactions").send({ tipo: "GASTO", monto: 1_000 }).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedCreateTransaction).not.toHaveBeenCalled();
   });
 });
 

@@ -322,7 +322,7 @@ app.patch("/commitments/:id/unpay", async (request, response, next) => {
   }
 });
 
-app.get("/movements", async (request, response, next) => {
+app.get("/movements", requireAuth, async (request, response, next) => {
   try {
     const queryError = validateSingleValueQuery(request.query, ["month", "accountId", "categoryId"]);
 
@@ -332,7 +332,7 @@ app.get("/movements", async (request, response, next) => {
     }
 
     response.json(
-      await getMovements({
+      await getMovements(request.currentUser!.id, {
         month: getMonthQueryValue(request.query.month),
         accountId: getOptionalQueryValue(request.query.accountId),
         categoryId: getOptionalQueryValue(request.query.categoryId),
@@ -343,9 +343,9 @@ app.get("/movements", async (request, response, next) => {
   }
 });
 
-app.patch("/movements/:id", async (request, response, next) => {
+app.patch("/movements/:id", requireAuth, async (request, response, next) => {
   try {
-    const movement = await updateMovement(request.params.id, request.body);
+    const movement = await updateMovement(request.params.id, request.body, request.currentUser!.id);
 
     response.json({ movement });
   } catch (error) {
@@ -353,9 +353,9 @@ app.patch("/movements/:id", async (request, response, next) => {
   }
 });
 
-app.delete("/movements/:id", async (request, response, next) => {
+app.delete("/movements/:id", requireAuth, async (request, response, next) => {
   try {
-    await deleteMovement(request.params.id);
+    await deleteMovement(request.params.id, request.currentUser!.id);
 
     response.status(204).send();
   } catch (error) {
@@ -363,9 +363,9 @@ app.delete("/movements/:id", async (request, response, next) => {
   }
 });
 
-app.post("/transactions", async (request, response, next) => {
+app.post("/transactions", requireAuth, async (request, response, next) => {
   try {
-    const transactions = await createTransaction(request.body);
+    const transactions = await createTransaction(request.body, request.currentUser!.id);
 
     response.status(201).json({ transactions });
   } catch (error) {
