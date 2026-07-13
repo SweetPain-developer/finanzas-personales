@@ -1,14 +1,14 @@
 # Harness — Finanzas Personales
 
-**Propósito de este documento**: es lo primero que se le da de contexto al orquestador (Gentleman-Programming SDD, corriendo sobre GPT-5.5 en OpenCode) al empezar o retomar una sesión de trabajo en este proyecto. No reemplaza a los documentos de `/docs` — los resume y les da prioridad, para que el modelo no tenga que inferir decisiones que ya están cerradas.
+**Propósito de este documento**: es lo primero que se usa como contexto al empezar o retomar una sesión de trabajo en este proyecto. No reemplaza a los documentos de `/docs` — los resume y les da prioridad, para que no haya que inferir decisiones que ya están cerradas.
 
-**Por qué existe**: con GPT-5.5 (sin Pro, sin créditos de Sonnet) el presupuesto de razonamiento por sesión es limitado. Este harness existe para reducir al máximo la ambigüedad que el modelo tendría que resolver por su cuenta — cada decisión que ya está cerrada acá es una decisión que el modelo no debería re-derivar ni cuestionar desde cero.
+**Por qué existe**: reduce ambigüedad y evita reabrir decisiones cerradas. Cada decisión registrada acá debe tratarse como contexto base antes de proponer cambios.
 
 ---
 
 ## 1. Qué es este proyecto (una línea)
 
-PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Un solo usuario, sin auth compleja, sin conexión bancaria real.
+PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Hoy opera como producto cerrado; auth + ownership está diseñado como próximo corte antes de deploy público.
 
 ## 2. Documentos fuente de verdad — cuándo consultar cada uno
 
@@ -19,8 +19,10 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 | `docs/estructura_proyecto_finanzas_personales.md` | Haya dudas de dónde va un archivo nuevo, o de por qué la estructura es la que es (y por qué no es la de `juego-cartas`) |
 | `docs/schema.prisma` | Se esté escribiendo cualquier query o mutación — es la única fuente de verdad del modelo de datos, no se infiere de memoria |
 | `docs/mockups/*.jsx` + `docs/mockups/README.md` | Se necesite ver el comportamiento de interacción ya validado de una pantalla, antes de reimplementarla en `apps/web/src` |
+| `docs/importacion/README.md` | Haya que importar o revisar datos reales locales con el flujo controlado y sus advertencias |
+| `docs/diseno_auth_ownership_finanzas_personales.md` | Se vaya a implementar autenticación, ownership por `userId`, deploy público o aislamiento de datos |
 
-**Regla dura**: si un documento de `/docs` contradice lo que el modelo "cree recordar" de una sesión anterior, gana el documento. Los documentos son la memoria persistente del proyecto; el historial de chat no lo es.
+**Regla dura**: si un documento de `/docs` contradice un recuerdo o una nota previa, gana el documento. Los documentos son la fuente persistente del proyecto.
 
 ## 3. Decisiones cerradas — no volver a abrir sin solicitud explícita del usuario
 
@@ -43,14 +45,14 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 - Estándar UX aplicado: acciones múltiples en tarjetas van en fila horizontal inferior; eliminar rojo, pausar/desactivar/marcar pendiente ámbar, activar/reactivar/confirmar/marcar pagado verde, editar/cancelar/limpiar filtros neutral.
 - En `Movimientos`, el FAB se oculta durante detalle/edición para no bloquear acciones del formulario.
 - Estructura de repo: monorepo simplificado con workspaces (npm/pnpm), **sin Turborepo**. `apps/web`, `apps/api`, `packages/shared-types`.
-- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, Railway, PWA, sin auth compleja en V1.
+- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth no está implementado; el diseño aprobado es `User + userId` ownership, producto cerrado y sin registro público en el primer slice.
 - UI implementada con CSS real propio, sin Tailwind ni UI kit por ahora. No agregar librerías de estilos sin aprobación explícita.
 - Navegación actual: estado local simple en `App`, sin router ni state manager. No agregar router/state manager hasta que el flujo lo justifique.
 
 ## 4. Qué NO hacer (aunque parezca una mejora razonable)
 
 - No agregar Turborepo, ni pipelines de build entre paquetes. Ya se evaluó y se descartó — ver sección 3.
-- No implementar nada de la lista de "Excluido de V1" del documento base: importación de Excel bancario, gráficos de análisis, conexión automática a bancos, multi-usuario, notificaciones, exportación de datos.
+- No implementar gráficos de análisis, conexión automática a bancos, multi-usuario público, notificaciones ni exportación de datos sin decisión explícita. La importación real local ya existe como flujo controlado; no convertirla en importación pública/general sin nuevo diseño.
 - No agregar librerías nuevas (de estado global, UI kit, etc.) sin aprobación explícita del usuario. El stack ya está cerrado.
 - No inventar campos nuevos en el schema de Prisma sin señalarlo como una propuesta explícita — el schema es la fuente de verdad, cambiarlo es una decisión del usuario, no del modelo.
 - No saltarse el enfoque de "datos hardcodeados primero": ninguna pantalla nueva se conecta a la API real antes de validar su layout con datos mock, siguiendo el mismo patrón que los archivos de `docs/mockups/`.
@@ -100,10 +102,21 @@ Ya está implementado:
 11. Dev UX de API: `apps/api` corre en watch mode con `tsx watch src/server.ts` para evitar procesos stale durante desarrollo.
 12. Configuración Prisma migrada a `apps/api/prisma.config.ts`; eliminado el bloque deprecated `package.json#prisma`.
 13. Estándares UX de acciones aplicados; el aviso de edición de plantilla recurrente fue validado visualmente durante la revisión del proyecto.
+14. Importador controlado de datos reales implementado y testeado; importación local real ejecutada correctamente tras backup y confirmación explícita.
+15. Repo inicializado y publicado en GitHub `origin/main` con commit `7ae4f07` (`chore: initial project setup`), manteniendo ignorados `.env`, workbooks, backups, `.atl`, `.opencode`, `node_modules` y `dist`.
+16. Documentación, tests, seeds y mockups públicos sanitizados con datos demo/genéricos.
+
+### Datos locales post-importación
+
+Conteos de validación local: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+
+Advertencias conocidas: algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. No inferir fechas reales a partir de ese fallback.
+
+Nota de producto validada: el dashboard calcula disponible como balance operativo global, no como disponible específico de una cuenta.
 
 ### Próxima tarea concreta
 
-Siguiente corte explícito: ejecutar el **checklist de entrega V1**, revisar deuda UX menor restante y luego decidir opcionales post-MVP.
+Siguiente corte explícito: implementar **auth + ownership** según `docs/diseno_auth_ownership_finanzas_personales.md` antes de deploy público o exposición fuera del entorno local.
 
 ### Backlog explícito — no dar por hecho
 
@@ -115,21 +128,15 @@ Siguiente corte explícito: ejecutar el **checklist de entrega V1**, revisar deu
 
 Si una instrucción del usuario no especifica algo que este harness o los documentos de `/docs` tampoco cubren:
 
-1. **No asumir y avanzar.** Con presupuesto de razonamiento limitado, una asunción incorrecta cuesta más corregirla después que preguntar antes.
+1. **No asumir y avanzar.** Una asunción incorrecta cuesta más corregirla después que preguntar antes.
 2. Proponer 1-2 opciones concretas y concisas, indicando cuál sería la más consistente con las decisiones ya cerradas (sección 3) y por qué.
 3. Si la ambigüedad es menor y de bajo riesgo de retrabajo (ej. nombre de una variable), elegir la opción más simple y decirlo explícitamente en una línea, sin bloquear el avance por eso.
 
-## 7. Disciplina de fases SDD
+## 7. Disciplina de planificación
 
-Este proyecto se trabaja con un orquestador SDD. Nota de una sesión anterior: se venían corriendo todas las fases (spec → plan → tasks → implementación) a través de un único perfil orquestador, en vez de invocar los comandos de cada fase de forma explícita.
-
-Para este proyecto, se recomienda **forzar el paso por cada fase de forma explícita** en vez de dejar que el orquestador salte directo a implementar:
+Para cambios estructurales, se recomienda **forzar el paso por cada fase de forma explícita** en vez de saltar directo a implementar:
 - Especificar la tarea puntual (qué pantalla/módulo, con qué mockup o sección del diseño de UI como referencia) antes de plantear el plan técnico.
 - Plantear el plan (qué archivos se tocan, qué se reutiliza de `shared-types`) antes de generar tareas.
 - Recién ahí generar las tareas de implementación concretas.
 
-Esto es más lento por sesión, pero con un modelo sin mucho presupuesto de razonamiento reduce el riesgo de que se salte una decisión ya cerrada (sección 3) por intentar resolver todo en un solo paso. Confirmar cuáles son los comandos exactos de fase en el setup actual de OpenCode antes de asumirlos, porque pueden cambiar entre configuraciones.
-
-## 8. Modelo en uso
-
-GPT-5.5 (sin Pro), vía el orquestador de Gentleman-Programming en OpenCode. Sin acceso a Sonnet por créditos. Esto refuerza el punto de la sección 7: preferir pasos chicos y explícitos por sobre pedirle al modelo que resuelva todo el módulo de una sola pasada.
+Esto es más lento por sesión, pero reduce el riesgo de saltarse una decisión ya cerrada (sección 3) por intentar resolver todo en un solo paso.

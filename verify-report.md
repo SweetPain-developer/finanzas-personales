@@ -2,7 +2,7 @@
 
 **Estado**: checklist operativo para entregar o retomar el proyecto con seguridad.  
 **Última actualización**: 12 de julio de 2026.  
-**Alcance**: validación local de API, Web, Prisma y flujos principales del MVP.
+**Alcance**: validación local de API, Web, Prisma, importación controlada y flujos principales del MVP.
 
 ---
 
@@ -15,7 +15,7 @@
 | Variables API | `apps/api/.env` debe definir `DATABASE_URL`; usar `apps/api/.env.example` como referencia. |
 | Prisma | Configuración activa en `apps/api/prisma.config.ts`; no usar `package.json#prisma`. |
 | Monorepo | Workspaces: `apps/*` y `packages/*`; API y Web se levantan por separado. |
-| Alcance V1 | Uso personal/local, sin auth compleja ni conexión bancaria automática. |
+| Alcance V1 | Uso personal/local. Auth + ownership está diseñado, pero aún no implementado; no exponer públicamente antes de ese corte. |
 
 ---
 
@@ -61,7 +61,7 @@
 | Prisma migrate status | `cd apps/api && pnpm prisma migrate status` | Migraciones sincronizadas con la BD local. |
 | Prisma generate | `cd apps/api && pnpm prisma:generate` | Client generado sin errores. |
 | Typecheck | `cd apps/api && pnpm typecheck` | Sin errores TypeScript. |
-| Tests | `cd apps/api && pnpm test` | Suite verde: 24 files, 272 tests. |
+| Tests | `cd apps/api && pnpm test` | Suite verde: 25 files, 282 tests. |
 
 ### Web
 
@@ -72,7 +72,21 @@
 
 ---
 
-## 5. Checklist manual del MVP
+## 5. Importación real y seguridad de datos
+
+| Tema | Estado |
+|---|---|
+| Importador controlado | Existe y está cubierto por tests. |
+| Ejecución local real | Ejecutada correctamente tras backup y confirmación explícita. |
+| Backup local | Existe en carpeta local ignorada para respaldos; no versionar nombres ni detalles sensibles. |
+| Conteos post-importación | 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos, 4 metas. |
+| Advertencias conocidas | Algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. |
+
+El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: initial project setup`). Permanecen ignorados `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`. Los artefactos públicos versionados quedaron sanitizados con datos demo/genéricos.
+
+---
+
+## 6. Checklist manual del MVP
 
 ### Funcional
 
@@ -97,7 +111,7 @@
 
 ---
 
-## 6. Limitaciones intencionales y follow-ups opcionales
+## 7. Limitaciones intencionales y follow-ups opcionales
 
 | Tipo | Nota |
 |---|---|
@@ -106,10 +120,11 @@
 | Opcional V1 | Completar PWA si bloquea uso diario: manifest, instalación móvil, iconos y offline básico. |
 | Opcional UX | Pulir labels de navegación inferior si la validación móvil lo pide. |
 | Opcional UX | Mejorar estados vacíos en vistas con pocos datos reales. |
+| Deploy | Cloudflare Pages + Render son opciones razonables más adelante; esperar a auth + ownership antes de exposición pública. |
 
 ---
 
-## 7. Decisión de readiness
+## 8. Decisión de readiness
 
 | Campo | Valor |
 |---|---|
@@ -124,3 +139,4 @@
 - [ ] Migraciones Prisma sincronizadas con la base local objetivo.
 - [ ] Checklist manual funcional completado sin bloqueantes.
 - [ ] Limitaciones conocidas aceptadas explícitamente para V1.
+- [ ] Auth + ownership implementado si el objetivo es despliegue público o acceso desde redes no controladas.

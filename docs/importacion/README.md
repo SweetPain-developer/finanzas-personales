@@ -4,6 +4,13 @@ Este flujo importa un workbook local ignorado por Git hacia la base de datos de 
 
 El archivo real **no debe commitearse**. Copia o renombra tu workbook local a esa ruta, o indica una ruta alternativa con `--workbook` o `IMPORT_WORKBOOK_PATH`.
 
+## Estado actual
+
+- El importador controlado existe y está cubierto por tests.
+- La importación local real se ejecutó correctamente después de crear un backup y recibir confirmación explícita.
+- El backup queda en una carpeta local ignorada para respaldos; no se deben documentar nombres reales, rutas sensibles ni contenido del workbook.
+- Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+
 ## Comandos
 
 Desde `apps/api`:
@@ -57,3 +64,4 @@ pnpm import:real-data:apply --wipe-existing
 - Las fechas faltantes de movimientos y transferencias se importan con la fecha técnica aprobada `2026-07-01`; no representan una fecha histórica real.
 - Las plantillas recurrentes sin día de vencimiento se conservan con `diaVencimiento = null`.
 - Los compromisos manuales sin fecha de vencimiento o vínculo de pago se conservan sin esos datos.
+- Estos `null` son esperados para campos opcionales; no deben interpretarse como error de importación por sí solos.

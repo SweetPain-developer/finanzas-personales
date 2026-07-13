@@ -71,7 +71,7 @@ Una app web progresiva (PWA) de uso personal que reemplaza el workflow de tres h
 
 ## 4. Las 4 preguntas que la app debe responder siempre
 
-1. **¿Cuánto puedo gastar hoy?** → Disponible para gastar (saldo total - compromisos pendientes - reservas)
+1. **¿Cuánto puedo gastar hoy?** → Disponible operativo para gastar (cuentas operativas - compromisos pendientes)
 2. **¿Cómo voy con mis metas de ahorro?** → Progreso visual por meta con proyección
 3. **¿En qué estoy gastando más?** → Breakdown por categoría del mes
 4. **¿Cuánto debo y cuándo vence?** → Compromisos pendientes ordenados por urgencia
@@ -83,9 +83,9 @@ Una app web progresiva (PWA) de uso personal que reemplaza el workflow de tres h
 | Restricción | Valor | Implicación |
 |-------------|-------|-------------|
 | Horas disponibles | ~10 hrs/semana | Scope acotado, iteración incremental |
-| Capital inicial | $0 | Hosting gratuito o mínimo (~$7/mes Railway) |
+| Capital inicial | $0 | Hosting gratuito o mínimo cuando se implemente protección de acceso |
 | Objetivo | Reemplazar workflow Obsidian+IA en 1 mes | Gate de validación concreto |
-| Usuarios V1 | 1 (el propio desarrollador) | Sin auth compleja, sin multi-tenant |
+| Usuarios V1 | 1 (el propio desarrollador) | Producto cerrado; auth + ownership planificado antes de deploy público |
 
 ---
 
@@ -96,9 +96,9 @@ Una app web progresiva (PWA) de uso personal que reemplaza el workflow de tres h
 | Frontend | React + TypeScript | Stack conocido, sin curva de aprendizaje |
 | Backend | Node.js + Express | Stack conocido |
 | Base de datos | PostgreSQL | Simple, relacional, suficiente |
-| Hosting | Railway (~$7/mes) | Ya familiar del proyecto Carioca |
+| Hosting | Cloudflare Pages + Render, más adelante | Razonable para separar Web/API; esperar auth + ownership antes de exponer públicamente |
 | Mobile | PWA (Progressive Web App) | Funciona en Android sin publicar en Play Store |
-| Auth | Sin auth en V1 (uso local) o Google OAuth simple | Overkill implementar auth completa en V1 |
+| Auth | Diseñada, pendiente de implementar | Siguiente corte: `User + userId` ownership, producto cerrado y sin registro público antes de deploy. |
 
 ---
 
@@ -124,7 +124,7 @@ Una app web progresiva (PWA) de uso personal que reemplaza el workflow de tres h
 
 ### Categorías iniciales (basadas en movimientos reales)
 
-Gastos: Auto, Alimentación, Delivery, Familia, Entretenimiento, Salud, Servicios, Suscripciones, Efectivo, Otro
+Gastos: Transporte, Alimentación, Delivery, Personal, Entretenimiento, Bienestar, Servicios, Suscripciones, Efectivo, Otro
 
 Ingresos: Ingreso principal, Transferencia recibida, Otro
 
@@ -134,7 +134,6 @@ Ingresos: Ingreso principal, Transferencia recibida, Otro
 Disponible =
   Suma(saldos cuentas operativas)
   - Suma(compromisos pendientes del mes)
-  - Suma(saldos cuentas de reserva/ahorro)
 ```
 
 ---
@@ -160,11 +159,13 @@ Disponible =
 | Movimientos | ✅ CRUD completo | Incluye comportamiento consciente de pares de transferencia para no romper saldos ni duplicar lectura visual. |
 | Metas | ✅ CRUD + estados completo | Progreso calculado desde la cuenta asociada. |
 | Compromisos | ✅ Completo para V1 operativa | CRUD, selector de mes, plantillas recurrentes, pago y reversa segura implementados. Editar una plantilla no muta compromisos ya generados; la UI avisa si el compromiso del mes visible ya existe. |
+| Importación real local | ✅ Controlada | Importador probado y ejecutado localmente tras backup y confirmación explícita; no expone workbooks ni respaldos al repo. |
 | PWA | 🔲 Pendiente | Manifest, instalación móvil, iconos y offline básico siguen en backlog V1. |
+| Auth + ownership | 🔲 Diseñado | Documentado en `docs/diseno_auth_ownership_finanzas_personales.md`; pendiente de implementación antes de deploy público. |
 
 ### Excluido de V1 (backlog)
 
-- Importación de Excel bancario (V2)
+- Importación pública/general de archivos bancarios o conciliación automática (V2)
 - Gráficos de análisis por categoría (V2)
 - Conexión automática a bancos (V3 o nunca)
 - Multi-usuario / finanzas compartidas (V3)
@@ -180,7 +181,7 @@ Disponible =
 | **Fase 0** (ahora) | Documentación y diseño | Documento base + diseño de UI + esquema DB completos |
 | **Fase 1** (~4-6 semanas) | MVP funcional | Reemplazar Obsidian completamente durante 1 mes |
 | **Gate V1** (mes 2) | Validación de uso real | ¿Seguís usándola sin esfuerzo de acordarte? |
-| **Fase 2** (si V1 pasa) | Importación Excel | Subir movimientos del banco, conciliación automática |
+| **Fase 2** (si V1 pasa) | Importación ampliada | Mejorar importación y evaluar conciliación automática |
 | **Fase 3** (si V2 pasa) | Análisis y proyecciones | Gráficos, proyección de metas, alertas |
 
 **Gate más importante**: Al final del primer mes de uso real, ¿el workflow mejoró o es igual de engorroso que Obsidian? Si mejoró, continuar. Si no, rediseñar antes de agregar features.
@@ -202,9 +203,9 @@ Disponible =
 
 ## 11. Próximas acciones
 
-1. **Checklist de entrega V1** — ejecutar validación manual pendiente, deuda UX menor y flujo diario completo antes de uso real sostenido.
-2. **PWA** — manifest, instalación móvil, iconos y offline básico si hace falta para uso real.
-3. **Opcionales post-MVP** — evaluar atajo "Agregar a esta meta", mejoras de búsqueda/scroll en movimientos y scripts raíz para levantar web + API juntos.
+1. **Auth + ownership** — implementar `User` + `userId` antes de deploy público o acceso fuera de entorno local controlado.
+2. **Checklist de entrega V1** — ejecutar validación manual pendiente, deuda UX menor y flujo diario completo antes de uso real sostenido.
+3. **PWA y opcionales post-MVP** — manifest/offline si hace falta, mejoras de búsqueda/scroll y scripts raíz para levantar web + API juntos.
 
 ### Verificación recomendada
 

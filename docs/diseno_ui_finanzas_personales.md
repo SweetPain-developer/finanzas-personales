@@ -145,8 +145,8 @@ Esta es la pantalla más importante del producto. Si toma más de 10 segundos, e
 │  ○ Crédito  ○ Secundaria      │    preseleccionada por defecto
 ├─────────────────────────────┤
 │  Categoría                   │
-│  🍔  🚗  👨‍👩‍👧  🎮  🏥  💡      │ ← grid de íconos, sin texto
-│  Delivery Auto Fam Ent Sal   │    para elegir rápido con el pulgar
+│  🍔  🚗  🧾  🎮  🛠️  💡      │ ← grid de íconos, sin texto
+│  Delivery Auto Cta Ent Mant  │    para elegir rápido con el pulgar
 │  📱  💵  📦                   │
 │  Susc Efec Otro               │
 ├─────────────────────────────┤
@@ -562,9 +562,10 @@ Esto no requiere cambios de schema — ya está soportado porque `Account` no ti
 
 ## 8. Próximos pasos sugeridos
 
-1. Preparar checklist de entrega V1 y cerrar deuda UX menor detectada en uso real.
-2. Completar PWA si bloquea el uso diario: manifest, instalación móvil, iconos y offline básico.
-3. Evaluar opcionales post-MVP: atajo "Agregar a esta meta", búsqueda/scroll en movimientos y scripts raíz para levantar web + API juntos.
+1. Implementar auth + ownership (`User` + `userId`) antes de deploy público o acceso fuera de entorno local controlado.
+2. Preparar checklist de entrega V1 y cerrar deuda UX menor detectada en uso real.
+3. Completar PWA solo si bloquea el uso diario: manifest, instalación móvil, iconos y offline básico.
+4. Evaluar opcionales post-MVP: atajo "Agregar a esta meta", búsqueda/scroll en movimientos y scripts raíz para levantar web + API juntos.
 
 ### Verificación recomendada
 
