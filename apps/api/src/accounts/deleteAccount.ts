@@ -1,5 +1,21 @@
 import { prisma } from "../prisma.js";
 
+type AccountDeleteCandidate = {
+  id: string;
+  _count: { transacciones: number; metas: number };
+};
+
+const accountStore = prisma as unknown as {
+  account: {
+    findFirst(args: {
+      where: { id: string; userId: string };
+      select: { id: true; _count: { select: { transacciones: true; metas: true } } };
+    }): Promise<AccountDeleteCandidate | null>;
+    deleteMany(args: { where: { id: string; userId: string } }): Promise<{ count: number }>;
+  };
+  $transaction<T>(callback: (tx: typeof accountStore) => Promise<T>): Promise<T>;
+};
+
 export class AccountDeleteNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -16,11 +32,11 @@ export class AccountDeleteConflictError extends Error {
 
 export type AccountDeleteResult = { status: "deleted" };
 
-export async function deleteAccount(id: string): Promise<AccountDeleteResult> {
+export async function deleteAccount(id: string, userId: string): Promise<AccountDeleteResult> {
   try {
-    return await prisma.$transaction(async (tx) => {
-      const account = await tx.account.findUnique({
-        where: { id },
+    return await accountStore.$transaction(async (tx) => {
+      const account = await tx.account.findFirst({
+        where: { id, userId },
         select: {
           id: true,
           _count: {
@@ -42,7 +58,11 @@ export async function deleteAccount(id: string): Promise<AccountDeleteResult> {
         throw new AccountDeleteConflictError("Account has financial history. Deactivate it instead of deleting it.");
       }
 
-      await tx.account.delete({ where: { id } });
+      const deleted = await tx.account.deleteMany({ where: { id, userId } });
+
+      if (deleted.count === 0) {
+        throw new AccountDeleteNotFoundError("Account not found.");
+      }
 
       return { status: "deleted" };
     });

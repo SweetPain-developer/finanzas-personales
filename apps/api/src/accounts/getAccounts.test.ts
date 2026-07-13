@@ -25,7 +25,7 @@ describe("getAccounts", () => {
       account({ id: "card-demo", nombre: "Tarjeta Demo", tipo: AccountType.DEUDA, saldo: -180_000, orden: 1 }),
     ]);
 
-    const result = await getAccounts();
+    const result = await getAccounts("user-demo");
 
     expect(result.groups).toMatchObject([
       {
@@ -41,6 +41,7 @@ describe("getAccounts", () => {
       { type: "RESERVA", label: "Reserva", accounts: [] },
     ]);
     expect(findManyAccounts).toHaveBeenCalledWith({
+      where: { userId: "user-demo" },
       select: { id: true, nombre: true, tipo: true, saldo: true, activa: true, notas: true, orden: true, _count: { select: { transacciones: true, metas: true } } },
       orderBy: [{ orden: "asc" }, { nombre: "asc" }, { id: "asc" }],
     });
@@ -52,10 +53,18 @@ describe("getAccounts", () => {
       account({ id: "inactive", nombre: "Cuenta Demo Internacional", tipo: AccountType.DEUDA, activa: false, notas: "Cuenta antigua", metas: 1 }),
     ]);
 
-    const result = await getAccounts();
+    const result = await getAccounts("user-demo");
 
     expect(result.groups[0]?.accounts).toEqual([{ id: "active", nombre: "Cuenta Demo Principal", tipo: "OPERATIVA", saldo: 0, activa: true, notas: null, hasHistory: true }]);
     expect(result.inactive).toEqual([{ id: "inactive", nombre: "Cuenta Demo Internacional", tipo: "DEUDA", saldo: 0, activa: false, notas: "Cuenta antigua", hasHistory: true }]);
+  });
+
+  it("filters accounts by the current user", async () => {
+    findManyAccounts.mockResolvedValueOnce([]);
+
+    await getAccounts("user-owner");
+
+    expect(findManyAccounts).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-owner" } }));
   });
 });
 

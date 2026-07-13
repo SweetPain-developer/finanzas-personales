@@ -41,7 +41,7 @@ describe("getQuickEntryOptions", () => {
     ]);
     findFirstTransaction.mockResolvedValue({ accountId: "account-secondary" });
 
-    const result = await getQuickEntryOptions();
+    const result = await getQuickEntryOptions("user-demo");
 
     expect(result).toEqual({
       accounts: [
@@ -59,13 +59,18 @@ describe("getQuickEntryOptions", () => {
     });
     expect(findManyAccounts).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { activa: true },
+        where: { userId: "user-demo", activa: true },
         orderBy: [{ orden: "asc" }, { id: "asc" }],
+      }),
+    );
+    expect(findManyCategories).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: "user-demo", tipo: { in: [CategoryType.GASTO, CategoryType.INGRESO] } },
       }),
     );
     expect(findFirstTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { account: { activa: true } },
+        where: { userId: "user-demo", account: { userId: "user-demo", activa: true } },
         orderBy: [{ fecha: "desc" }, { createdAt: "desc" }, { id: "desc" }],
       }),
     );
@@ -94,7 +99,7 @@ describe("getQuickEntryOptions", () => {
       );
     });
 
-    const result = await getQuickEntryOptions();
+    const result = await getQuickEntryOptions("user-demo");
 
     expect(result.lastUsedAccountId).toBe("account-backup");
   });
@@ -104,12 +109,30 @@ describe("getQuickEntryOptions", () => {
     findManyCategories.mockResolvedValueOnce([]);
     findFirstTransaction.mockResolvedValueOnce(null);
 
-    await expect(getQuickEntryOptions()).resolves.toMatchObject({ lastUsedAccountId: "account-first" });
+    await expect(getQuickEntryOptions("user-demo")).resolves.toMatchObject({ lastUsedAccountId: "account-first" });
 
     findManyAccounts.mockResolvedValueOnce([]);
     findManyCategories.mockResolvedValueOnce([]);
     findFirstTransaction.mockResolvedValueOnce(null);
 
-    await expect(getQuickEntryOptions()).resolves.toMatchObject({ lastUsedAccountId: null });
+    await expect(getQuickEntryOptions("user-demo")).resolves.toMatchObject({ lastUsedAccountId: null });
+  });
+
+  it("scopes account and category options to the current user", async () => {
+    findManyAccounts.mockResolvedValue([]);
+    findManyCategories.mockResolvedValue([]);
+    findFirstTransaction.mockResolvedValue(null);
+
+    await getQuickEntryOptions("user-owner");
+
+    expect(findManyAccounts).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: "user-owner", activa: true },
+    }));
+    expect(findManyCategories).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: "user-owner", tipo: { in: [CategoryType.GASTO, CategoryType.INGRESO] } },
+    }));
+    expect(findFirstTransaction).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: "user-owner", account: { userId: "user-owner", activa: true } },
+    }));
   });
 });

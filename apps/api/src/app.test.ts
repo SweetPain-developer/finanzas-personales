@@ -243,7 +243,7 @@ describe("GET /quick-entry/options", () => {
       lastUsedAccountId: "account-demo-primary",
     });
 
-    const response = await request(app).get("/quick-entry/options").expect(200);
+    const response = await request(app).get("/quick-entry/options").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({
       accounts: [{ id: "account-demo-primary", nombre: "Cuenta Demo Principal", tipo: "OPERATIVA" }],
@@ -253,7 +253,14 @@ describe("GET /quick-entry/options", () => {
       },
       lastUsedAccountId: "account-demo-primary",
     });
-    expect(mockedGetQuickEntryOptions).toHaveBeenCalledOnce();
+    expect(mockedGetQuickEntryOptions).toHaveBeenCalledWith("user-demo");
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/quick-entry/options").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedGetQuickEntryOptions).not.toHaveBeenCalled();
   });
 });
 
@@ -274,7 +281,14 @@ describe("GET /accounts", () => {
       groups: [{ type: "OPERATIVA", label: "Operativa", accounts: [{ id: "account-demo-primary", nombre: "Cuenta Demo Principal", tipo: "OPERATIVA", saldo: 450_200, activa: true, notas: null, hasHistory: true }] }],
       inactive: [{ id: "account-demo-international", nombre: "Cuenta Demo Internacional", tipo: "DEUDA", saldo: 0, activa: false, notas: null, hasHistory: false }],
     });
-    expect(mockedGetAccounts).toHaveBeenCalledOnce();
+    expect(mockedGetAccounts).toHaveBeenCalledWith("user-demo");
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/accounts").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedGetAccounts).not.toHaveBeenCalled();
   });
 });
 
@@ -297,7 +311,7 @@ describe("POST /accounts", () => {
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     });
 
-    const response = await request(app).post("/accounts").send(payload).expect(201);
+    const response = await request(app).post("/accounts").set("Cookie", authCookie).send(payload).expect(201);
 
     expect(response.body.account).toMatchObject({
       id: "account-savings",
@@ -306,7 +320,14 @@ describe("POST /accounts", () => {
       saldo: 150_000,
       activa: true,
     });
-    expect(mockedCreateAccount).toHaveBeenCalledWith(payload);
+    expect(mockedCreateAccount).toHaveBeenCalledWith(payload, "user-demo");
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).post("/accounts").send({ name: "Ahorro", type: "AHORRO", balance: 10 }).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedCreateAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -329,7 +350,7 @@ describe("PATCH /accounts/:id", () => {
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
 
-    const response = await request(app).patch("/accounts/account-demo-primary").send(payload).expect(200);
+    const response = await request(app).patch("/accounts/account-demo-primary").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body.account).toMatchObject({
       id: "account-demo-primary",
@@ -338,11 +359,11 @@ describe("PATCH /accounts/:id", () => {
       saldo: 460_000,
       activa: true,
     });
-    expect(mockedUpdateAccount).toHaveBeenCalledWith("account-demo-primary", payload);
+    expect(mockedUpdateAccount).toHaveBeenCalledWith("account-demo-primary", payload, "user-demo");
   });
 
   it("returns 400 for invalid account update payloads", async () => {
-    const response = await request(app).patch("/accounts/account-demo-primary").send({ name: "", type: "OPERATIVA", balance: 10 }).expect(400);
+    const response = await request(app).patch("/accounts/account-demo-primary").set("Cookie", authCookie).send({ name: "", type: "OPERATIVA", balance: 10 }).expect(400);
 
     expect(response.body.error).toBe("Invalid request body");
     expect(mockedUpdateAccount).not.toHaveBeenCalled();
@@ -351,9 +372,16 @@ describe("PATCH /accounts/:id", () => {
   it("returns 404 when the account does not exist", async () => {
     mockedUpdateAccount.mockRejectedValueOnce(new AccountUpdateNotFoundError("Account not found."));
 
-    const response = await request(app).patch("/accounts/missing").send({ name: "Cuenta", type: "AHORRO", balance: 10 }).expect(404);
+    const response = await request(app).patch("/accounts/missing").set("Cookie", authCookie).send({ name: "Cuenta", type: "AHORRO", balance: 10 }).expect(404);
 
     expect(response.body).toEqual({ error: "Account not found." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).patch("/accounts/account-demo-primary").send({ name: "Cuenta", type: "AHORRO", balance: 10 }).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedUpdateAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -365,27 +393,34 @@ describe("DELETE /accounts/:id", () => {
   it("returns deleted when the account has no history", async () => {
     mockedDeleteAccount.mockResolvedValueOnce({ status: "deleted" });
 
-    const response = await request(app).delete("/accounts/account-empty").expect(200);
+    const response = await request(app).delete("/accounts/account-empty").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({ status: "deleted" });
-    expect(mockedDeleteAccount).toHaveBeenCalledWith("account-empty");
+    expect(mockedDeleteAccount).toHaveBeenCalledWith("account-empty", "user-demo");
   });
 
   it("returns 409 when the account has history", async () => {
     mockedDeleteAccount.mockRejectedValueOnce(new AccountDeleteConflictError("Account has financial history. Deactivate it instead of deleting it."));
 
-    const response = await request(app).delete("/accounts/account-demo-primary").expect(409);
+    const response = await request(app).delete("/accounts/account-demo-primary").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Account has financial history. Deactivate it instead of deleting it." });
-    expect(mockedDeleteAccount).toHaveBeenCalledWith("account-demo-primary");
+    expect(mockedDeleteAccount).toHaveBeenCalledWith("account-demo-primary", "user-demo");
   });
 
   it("returns 404 when the account does not exist", async () => {
     mockedDeleteAccount.mockRejectedValueOnce(new AccountDeleteNotFoundError("Account not found."));
 
-    const response = await request(app).delete("/accounts/missing").expect(404);
+    const response = await request(app).delete("/accounts/missing").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Account not found." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).delete("/accounts/account-empty").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedDeleteAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -407,7 +442,7 @@ describe("PATCH /accounts/:id/deactivate", () => {
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
 
-    const response = await request(app).patch("/accounts/account-demo-primary/deactivate").expect(200);
+    const response = await request(app).patch("/accounts/account-demo-primary/deactivate").set("Cookie", authCookie).expect(200);
 
     expect(response.body.account).toMatchObject({
       id: "account-demo-primary",
@@ -416,15 +451,22 @@ describe("PATCH /accounts/:id/deactivate", () => {
       saldo: 450_200,
       activa: false,
     });
-    expect(mockedDeactivateAccount).toHaveBeenCalledWith("account-demo-primary");
+    expect(mockedDeactivateAccount).toHaveBeenCalledWith("account-demo-primary", "user-demo");
   });
 
   it("returns 404 when the account does not exist", async () => {
     mockedDeactivateAccount.mockRejectedValueOnce(new AccountDeactivateNotFoundError("Account not found."));
 
-    const response = await request(app).patch("/accounts/missing/deactivate").expect(404);
+    const response = await request(app).patch("/accounts/missing/deactivate").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Account not found." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).patch("/accounts/account-demo-primary/deactivate").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedDeactivateAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -446,7 +488,7 @@ describe("PATCH /accounts/:id/reactivate", () => {
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
 
-    const response = await request(app).patch("/accounts/account-demo-primary/reactivate").expect(200);
+    const response = await request(app).patch("/accounts/account-demo-primary/reactivate").set("Cookie", authCookie).expect(200);
 
     expect(response.body.account).toMatchObject({
       id: "account-demo-primary",
@@ -455,15 +497,22 @@ describe("PATCH /accounts/:id/reactivate", () => {
       saldo: 450_200,
       activa: true,
     });
-    expect(mockedReactivateAccount).toHaveBeenCalledWith("account-demo-primary");
+    expect(mockedReactivateAccount).toHaveBeenCalledWith("account-demo-primary", "user-demo");
   });
 
   it("returns 404 when the account does not exist", async () => {
     mockedReactivateAccount.mockRejectedValueOnce(new AccountReactivateNotFoundError("Account not found."));
 
-    const response = await request(app).patch("/accounts/missing/reactivate").expect(404);
+    const response = await request(app).patch("/accounts/missing/reactivate").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Account not found." });
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).patch("/accounts/account-demo-primary/reactivate").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(mockedReactivateAccount).not.toHaveBeenCalled();
   });
 });
 

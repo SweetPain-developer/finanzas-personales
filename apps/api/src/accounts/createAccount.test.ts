@@ -38,13 +38,36 @@ describe('createAccount', () => {
       updatedAt: new Date(),
     });
 
-    await createAccount(newAccount);
+    await createAccount(newAccount, 'user-demo');
 
     expect(createMock).toHaveBeenCalledWith({
       data: {
         nombre: 'Test Account',
         tipo: 'AHORRO',
         saldo: 1000,
+        userId: 'user-demo',
+      },
+    });
+  });
+
+  it('uses the authenticated user id instead of any client-provided userId', async () => {
+    const payload = {
+      name: 'Scoped Account',
+      type: 'OPERATIVA',
+      balance: 500,
+      userId: 'attacker-user',
+    } as unknown as CreateAccountDTO;
+
+    createMock.mockResolvedValueOnce({ id: 'account-scoped' });
+
+    await createAccount(payload, 'user-owner');
+
+    expect(createMock).toHaveBeenCalledWith({
+      data: {
+        nombre: 'Scoped Account',
+        tipo: 'OPERATIVA',
+        saldo: 500,
+        userId: 'user-owner',
       },
     });
   });

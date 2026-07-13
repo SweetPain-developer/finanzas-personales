@@ -7,18 +7,18 @@ vi.mock('../prisma.js', () => ({
   prisma: {
     account: {
       updateMany: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
+      findFirstOrThrow: vi.fn(),
     },
   },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
-const findUniqueOrThrowMock = prisma.account.findUniqueOrThrow as Mock;
+const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
 
 describe('updateAccount', () => {
   beforeEach(() => {
     updateManyMock.mockReset();
-    findUniqueOrThrowMock.mockReset();
+    findFirstOrThrowMock.mockReset();
   });
 
   it('maps DTO fields to Prisma account fields', async () => {
@@ -40,19 +40,19 @@ describe('updateAccount', () => {
     };
 
     updateManyMock.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrowMock.mockResolvedValueOnce(persistedAccount);
+    findFirstOrThrowMock.mockResolvedValueOnce(persistedAccount);
 
-    await expect(updateAccount('account-demo-primary', accountUpdate)).resolves.toEqual(persistedAccount);
+    await expect(updateAccount('account-demo-primary', accountUpdate, 'user-demo')).resolves.toEqual(persistedAccount);
 
     expect(updateManyMock).toHaveBeenCalledWith({
-      where: { id: 'account-demo-primary' },
+      where: { id: 'account-demo-primary', userId: 'user-demo' },
       data: {
         nombre: 'Cuenta principal',
         tipo: 'OPERATIVA',
         saldo: 460000,
       },
     });
-    expect(findUniqueOrThrowMock).toHaveBeenCalledWith({ where: { id: 'account-demo-primary' } });
+    expect(findFirstOrThrowMock).toHaveBeenCalledWith({ where: { id: 'account-demo-primary', userId: 'user-demo' } });
   });
 
   it('throws when the account does not exist', async () => {
@@ -63,9 +63,26 @@ describe('updateAccount', () => {
         name: 'Cuenta inexistente',
         type: 'AHORRO',
         balance: 0,
-      }),
+      }, 'user-demo'),
     ).rejects.toBeInstanceOf(AccountUpdateNotFoundError);
 
-    expect(findUniqueOrThrowMock).not.toHaveBeenCalled();
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
+  });
+
+  it('returns not found for accounts owned by another user', async () => {
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      updateAccount('account-other-user', {
+        name: 'Cuenta ajena',
+        type: 'AHORRO',
+        balance: 0,
+      }, 'user-owner'),
+    ).rejects.toBeInstanceOf(AccountUpdateNotFoundError);
+
+    expect(updateManyMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'account-other-user', userId: 'user-owner' },
+    }));
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
   });
 });

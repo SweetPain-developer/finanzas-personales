@@ -97,63 +97,63 @@ app.get("/dashboard", async (request, response, next) => {
   }
 });
 
-app.get("/quick-entry/options", async (_request, response, next) => {
+app.get("/quick-entry/options", requireAuth, async (request, response, next) => {
   try {
-    response.json(await getQuickEntryOptions());
+    response.json(await getQuickEntryOptions(request.currentUser!.id));
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/accounts", requireAuth, async (_request, response, next) => {
+app.get("/accounts", requireAuth, async (request, response, next) => {
   try {
-    response.json(await getAccounts());
+    response.json(await getAccounts(request.currentUser!.id));
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/accounts", async (request, response, next) => {
+app.post("/accounts", requireAuth, async (request, response, next) => {
   try {
     const createAccountDTO = CreateAccountDTO.parse(request.body);
-    const account = await createAccount(createAccountDTO);
+    const account = await createAccount(createAccountDTO, request.currentUser!.id);
     response.status(201).json({ account });
   } catch (error) {
     next(error);
   }
 });
 
-app.patch("/accounts/:id", async (request, response, next) => {
+app.patch("/accounts/:id", requireAuth, async (request, response, next) => {
   try {
     const updateAccountDTO = UpdateAccountDTO.parse(request.body);
-    const account = await updateAccount(request.params.id, updateAccountDTO);
+    const account = await updateAccount(request.params.id, updateAccountDTO, request.currentUser!.id);
     response.json({ account });
   } catch (error) {
     next(error);
   }
 });
 
-app.patch("/accounts/:id/reactivate", async (request, response, next) => {
+app.patch("/accounts/:id/reactivate", requireAuth, async (request, response, next) => {
   try {
-    const account = await reactivateAccount(request.params.id);
+    const account = await reactivateAccount(request.params.id, request.currentUser!.id);
     response.json({ account });
   } catch (error) {
     next(error);
   }
 });
 
-app.patch("/accounts/:id/deactivate", async (request, response, next) => {
+app.patch("/accounts/:id/deactivate", requireAuth, async (request, response, next) => {
   try {
-    const account = await deactivateAccount(request.params.id);
+    const account = await deactivateAccount(request.params.id, request.currentUser!.id);
     response.json({ account });
   } catch (error) {
     next(error);
   }
 });
 
-app.delete("/accounts/:id", async (request, response, next) => {
+app.delete("/accounts/:id", requireAuth, async (request, response, next) => {
   try {
-    const result = await deleteAccount(request.params.id);
+    const result = await deleteAccount(request.params.id, request.currentUser!.id);
 
     response.json(result);
   } catch (error) {

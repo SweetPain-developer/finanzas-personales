@@ -2,6 +2,20 @@ import { AccountType, type Account } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+type AccountWithHistoryCount = Omit<AccountListItem, "hasHistory"> & Pick<Account, "orden"> & {
+  _count: { transacciones: number; metas: number };
+};
+
+const accountReader = prisma as unknown as {
+  account: {
+    findMany(args: {
+      where: { userId: string };
+      select: Record<string, unknown>;
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    }): Promise<AccountWithHistoryCount[]>;
+  };
+};
+
 export type AccountListItem = Pick<Account, "id" | "nombre" | "tipo" | "saldo" | "activa" | "notas"> & {
   hasHistory: boolean;
 };
@@ -26,8 +40,9 @@ const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.RESERVA]: "Reserva",
 };
 
-export async function getAccounts(): Promise<AccountsData> {
-  const accounts = await prisma.account.findMany({
+export async function getAccounts(userId: string): Promise<AccountsData> {
+  const accounts = await accountReader.account.findMany({
+    where: { userId },
     select: {
       id: true,
       nombre: true,
@@ -54,7 +69,7 @@ export async function getAccounts(): Promise<AccountsData> {
   };
 }
 
-function toAccountListItem(account: Omit<AccountListItem, "hasHistory"> & Pick<Account, "orden"> & { _count: { transacciones: number; metas: number } }): AccountListItem {
+function toAccountListItem(account: AccountWithHistoryCount): AccountListItem {
   return {
     id: account.id,
     nombre: account.nombre,

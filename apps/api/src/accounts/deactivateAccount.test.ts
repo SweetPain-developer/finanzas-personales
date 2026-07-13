@@ -7,18 +7,18 @@ vi.mock("../prisma.js", () => ({
   prisma: {
     account: {
       updateMany: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
+      findFirstOrThrow: vi.fn(),
     },
   },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
-const findUniqueOrThrowMock = prisma.account.findUniqueOrThrow as Mock;
+const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
 
 describe("deactivateAccount", () => {
   beforeEach(() => {
     updateManyMock.mockReset();
-    findUniqueOrThrowMock.mockReset();
+    findFirstOrThrowMock.mockReset();
   });
 
   it("deactivates an existing account", async () => {
@@ -35,17 +35,17 @@ describe("deactivateAccount", () => {
     };
 
     updateManyMock.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrowMock.mockResolvedValueOnce(persistedAccount);
+    findFirstOrThrowMock.mockResolvedValueOnce(persistedAccount);
 
-    const account = await deactivateAccount("account-demo-primary");
+    const account = await deactivateAccount("account-demo-primary", "user-demo");
 
     expect(account).toEqual(persistedAccount);
     expect(account.activa).toBe(false);
     expect(updateManyMock).toHaveBeenCalledWith({
-      where: { id: "account-demo-primary" },
+      where: { id: "account-demo-primary", userId: "user-demo" },
       data: { activa: false },
     });
-    expect(findUniqueOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-demo-primary" } });
+    expect(findFirstOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-demo-primary", userId: "user-demo" } });
   });
 
   it("does not require history checks to deactivate an existing account", async () => {
@@ -62,33 +62,47 @@ describe("deactivateAccount", () => {
     };
 
     updateManyMock.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrowMock.mockResolvedValueOnce(persistedAccount);
+    findFirstOrThrowMock.mockResolvedValueOnce(persistedAccount);
 
-    await expect(deactivateAccount("account-empty")).resolves.toEqual(persistedAccount);
+    await expect(deactivateAccount("account-empty", "user-demo")).resolves.toEqual(persistedAccount);
 
     expect(updateManyMock).toHaveBeenCalledWith({
-      where: { id: "account-empty" },
+      where: { id: "account-empty", userId: "user-demo" },
       data: { activa: false },
     });
-    expect(findUniqueOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-empty" } });
+    expect(findFirstOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-empty", userId: "user-demo" } });
   });
 
   it("throws when the account does not exist", async () => {
     updateManyMock.mockResolvedValueOnce({ count: 0 });
 
-    await expect(deactivateAccount("missing-account")).rejects.toBeInstanceOf(AccountDeactivateNotFoundError);
+    await expect(deactivateAccount("missing-account", "user-demo")).rejects.toBeInstanceOf(AccountDeactivateNotFoundError);
 
-    expect(findUniqueOrThrowMock).not.toHaveBeenCalled();
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
   });
 
   it("maps a post-update not-found race to the domain not found error", async () => {
     updateManyMock.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrowMock.mockRejectedValueOnce({ code: "P2025" });
+    findFirstOrThrowMock.mockRejectedValueOnce({ code: "P2025" });
 
-    await expect(deactivateAccount("account-removed-after-update")).rejects.toBeInstanceOf(
+    await expect(deactivateAccount("account-removed-after-update", "user-demo")).rejects.toBeInstanceOf(
       AccountDeactivateNotFoundError,
     );
 
-    expect(findUniqueOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-removed-after-update" } });
+    expect(findFirstOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-removed-after-update", userId: "user-demo" } });
+  });
+
+  it("does not deactivate accounts owned by another user", async () => {
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+
+    await expect(deactivateAccount("account-other-user", "user-owner")).rejects.toBeInstanceOf(
+      AccountDeactivateNotFoundError,
+    );
+
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: { id: "account-other-user", userId: "user-owner" },
+      data: { activa: false },
+    });
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
   });
 });

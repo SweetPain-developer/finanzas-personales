@@ -7,18 +7,18 @@ vi.mock("../prisma.js", () => ({
   prisma: {
     account: {
       updateMany: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
+      findFirstOrThrow: vi.fn(),
     },
   },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
-const findUniqueOrThrowMock = prisma.account.findUniqueOrThrow as Mock;
+const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
 
 describe("reactivateAccount", () => {
   beforeEach(() => {
     updateManyMock.mockReset();
-    findUniqueOrThrowMock.mockReset();
+    findFirstOrThrowMock.mockReset();
   });
 
   it("reactivates an existing account", async () => {
@@ -35,28 +35,42 @@ describe("reactivateAccount", () => {
     };
 
     updateManyMock.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrowMock.mockResolvedValueOnce(persistedAccount);
+    findFirstOrThrowMock.mockResolvedValueOnce(persistedAccount);
 
-    const account = await reactivateAccount("account-demo-primary");
+    const account = await reactivateAccount("account-demo-primary", "user-demo");
 
     expect(account).toEqual(persistedAccount);
     expect(account.activa).toBe(true);
 
     expect(updateManyMock).toHaveBeenCalledWith({
-      where: { id: "account-demo-primary" },
+      where: { id: "account-demo-primary", userId: "user-demo" },
       data: { activa: true },
     });
-    expect(findUniqueOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-demo-primary" } });
+    expect(findFirstOrThrowMock).toHaveBeenCalledWith({ where: { id: "account-demo-primary", userId: "user-demo" } });
   });
 
   it("throws when the account does not exist", async () => {
     updateManyMock.mockResolvedValueOnce({ count: 0 });
 
-    await expect(reactivateAccount("missing-account")).rejects.toMatchObject({
+    await expect(reactivateAccount("missing-account", "user-demo")).rejects.toMatchObject({
       name: "AccountReactivateNotFoundError",
       message: "Account not found.",
     });
 
-    expect(findUniqueOrThrowMock).not.toHaveBeenCalled();
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reactivate accounts owned by another user", async () => {
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+
+    await expect(reactivateAccount("account-other-user", "user-owner")).rejects.toBeInstanceOf(
+      AccountReactivateNotFoundError,
+    );
+
+    expect(updateManyMock).toHaveBeenCalledWith({
+      where: { id: "account-other-user", userId: "user-owner" },
+      data: { activa: true },
+    });
+    expect(findFirstOrThrowMock).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,12 @@
+import type { Account } from "@prisma/client";
 import { prisma } from "../prisma.js";
+
+const accountWriter = prisma as unknown as {
+  account: {
+    updateMany(args: { where: { id: string; userId: string }; data: { activa: boolean } }): Promise<{ count: number }>;
+    findFirstOrThrow(args: { where: { id: string; userId: string } }): Promise<Account>;
+  };
+};
 
 export class AccountReactivateNotFoundError extends Error {
   constructor(message: string) {
@@ -7,9 +15,9 @@ export class AccountReactivateNotFoundError extends Error {
   }
 }
 
-export async function reactivateAccount(id: string) {
-  const updatedAccount = await prisma.account.updateMany({
-    where: { id },
+export async function reactivateAccount(id: string, userId: string) {
+  const updatedAccount = await accountWriter.account.updateMany({
+    where: { id, userId },
     data: { activa: true },
   });
 
@@ -17,5 +25,5 @@ export async function reactivateAccount(id: string) {
     throw new AccountReactivateNotFoundError("Account not found.");
   }
 
-  return prisma.account.findUniqueOrThrow({ where: { id } });
+  return accountWriter.account.findFirstOrThrow({ where: { id, userId } });
 }
