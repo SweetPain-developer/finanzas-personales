@@ -3,6 +3,7 @@ import { AccountType, CommitmentStatus, CommitmentType, GoalStatus } from "@pris
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { app } from "./app.js";
+import { createSessionToken } from "./auth/session.js";
 import { createAccount } from "./accounts/createAccount.js";
 import { AccountDeleteConflictError, AccountDeleteNotFoundError, deleteAccount } from "./accounts/deleteAccount.js";
 import { getAccounts } from "./accounts/getAccounts.js";
@@ -153,6 +154,14 @@ vi.mock("./transactions/createTransaction.js", () => ({
   createTransaction: vi.fn(),
 }));
 
+vi.mock("./prisma.js", () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
 const mockedGetDashboardData = vi.mocked(getDashboardData);
 const mockedGetAccounts = vi.mocked(getAccounts);
 const mockedCreateAccount = vi.mocked(createAccount);
@@ -181,6 +190,11 @@ const mockedDeleteMovement = vi.mocked(deleteMovement);
 const mockedUpdateMovement = vi.mocked(updateMovement);
 const mockedGetQuickEntryOptions = vi.mocked(getQuickEntryOptions);
 const mockedCreateTransaction = vi.mocked(createTransaction);
+
+process.env.AUTH_JWT_SECRET = "test-secret-with-enough-entropy";
+process.env.AUTH_COOKIE_SECURE = "false";
+
+const authCookie = `auth_token=${createSessionToken({ id: "user-demo", email: "demo@example.com", displayName: "Demo User" })}`;
 
 describe("GET /dashboard", () => {
   beforeEach(() => {
@@ -254,7 +268,7 @@ describe("GET /accounts", () => {
       inactive: [{ id: "account-demo-international", nombre: "Cuenta Demo Internacional", tipo: AccountType.DEUDA, saldo: 0, activa: false, notas: null, hasHistory: false }],
     });
 
-    const response = await request(app).get("/accounts").expect(200);
+    const response = await request(app).get("/accounts").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({
       groups: [{ type: "OPERATIVA", label: "Operativa", accounts: [{ id: "account-demo-primary", nombre: "Cuenta Demo Principal", tipo: "OPERATIVA", saldo: 450_200, activa: true, notas: null, hasHistory: true }] }],

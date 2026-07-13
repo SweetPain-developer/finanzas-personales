@@ -2,6 +2,8 @@ import { z } from "zod";
 import cors from "cors";
 import express from "express";
 
+import { requireAuth } from "./auth/middleware.js";
+import { AuthenticationError, clearAuthCookie, createSessionToken, loginWithPassword, resolveCurrentUser, setAuthCookie } from "./auth/session.js";
 import { getAccounts } from "./accounts/getAccounts.js";
 import { createAccount } from "./accounts/createAccount.js";
 import { AccountUpdateNotFoundError, updateAccount } from "./accounts/updateAccount.js";
@@ -32,11 +34,49 @@ import { createTransaction, TransactionValidationError } from "./transactions/cr
 
 const app = express();
 
+const LoginDTO = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
 app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_request, response) => {
   response.json({ status: "ok" });
+});
+
+app.post("/auth/login", async (request, response, next) => {
+  try {
+    const credentials = LoginDTO.parse(request.body);
+    const user = await loginWithPassword(credentials.email, credentials.password);
+    const token = createSessionToken(user);
+
+    setAuthCookie(response, token);
+    response.json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/auth/logout", (_request, response) => {
+  clearAuthCookie(response);
+  response.status(204).send();
+});
+
+app.get("/auth/session", async (request, response, next) => {
+  try {
+    const user = await resolveCurrentUser(request);
+
+    if (!user) {
+      response.status(401).json({ error: "Authentication required." });
+      return;
+    }
+
+    response.json({ user });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // API contract: GET /dashboard accepts zero or one `month=YYYY-MM` query value.
@@ -65,7 +105,7 @@ app.get("/quick-entry/options", async (_request, response, next) => {
   }
 });
 
-app.get("/accounts", async (_request, response, next) => {
+app.get("/accounts", requireAuth, async (_request, response, next) => {
   try {
     response.json(await getAccounts());
   } catch (error) {
@@ -336,6 +376,11 @@ app.post("/transactions", async (request, response, next) => {
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (error instanceof z.ZodError) {
     response.status(400).json({ error: "Invalid request body", issues: error.issues });
+    return;
+  }
+
+  if (error instanceof AuthenticationError) {
+    response.status(401).json({ error: error.message });
     return;
   }
 
