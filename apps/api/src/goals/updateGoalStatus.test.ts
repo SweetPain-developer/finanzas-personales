@@ -6,35 +6,40 @@ import { GoalStatusNotFoundError, updateGoalStatus } from "./updateGoalStatus.js
 
 vi.mock("../prisma.js", () => ({
   prisma: {
-    goal: { update: vi.fn() },
+    goal: { findFirstOrThrow: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
 const updateGoalRecord = prisma.goal.update as Mock;
+const updateManyGoal = prisma.goal.updateMany as Mock;
+const findFirstOrThrowGoal = prisma.goal.findFirstOrThrow as Mock;
 
 describe("updateGoalStatus", () => {
   beforeEach(() => {
     updateGoalRecord.mockReset();
+    updateManyGoal.mockReset();
+    findFirstOrThrowGoal.mockReset();
   });
 
   it.each([GoalStatus.ACTIVA, GoalStatus.PAUSADA, GoalStatus.COMPLETADA])("updates a goal status to %s and returns derived progress", async (status) => {
-    updateGoalRecord.mockResolvedValueOnce(goalRecord({ estado: status }));
+    updateManyGoal.mockResolvedValueOnce({ count: 1 });
+    findFirstOrThrowGoal.mockResolvedValueOnce(goalRecord({ estado: status }));
 
-    const result = await updateGoalStatus("goal-vacations", { status });
+    const result = await updateGoalStatus("goal-vacations", { status }, "user-demo");
 
-    expect(updateGoalRecord).toHaveBeenCalledWith({
-      where: { id: "goal-vacations" },
+    expect(updateManyGoal).toHaveBeenCalledWith({
+      where: { id: "goal-vacations", userId: "user-demo" },
       data: { estado: status },
-      select: expect.any(Object),
     });
     expect(result.estado).toBe(status);
     expect(result.progressPercent).toBe(45);
   });
 
   it("does not expose account balance or transaction mutations", async () => {
-    updateGoalRecord.mockResolvedValueOnce(goalRecord({ estado: GoalStatus.PAUSADA }));
+    updateManyGoal.mockResolvedValueOnce({ count: 1 });
+    findFirstOrThrowGoal.mockResolvedValueOnce(goalRecord({ estado: GoalStatus.PAUSADA }));
 
-    await updateGoalStatus("goal-vacations", { status: GoalStatus.PAUSADA });
+    await updateGoalStatus("goal-vacations", { status: GoalStatus.PAUSADA }, "user-demo");
 
     expect((prisma as unknown as { account?: { update?: Mock } }).account?.update).toBeUndefined();
     expect((prisma as unknown as { transaction?: { create?: Mock; update?: Mock; delete?: Mock } }).transaction?.create).toBeUndefined();
@@ -43,9 +48,9 @@ describe("updateGoalStatus", () => {
   });
 
   it("returns a not-found error when the goal does not exist", async () => {
-    updateGoalRecord.mockRejectedValueOnce({ code: "P2025" });
+    updateManyGoal.mockResolvedValueOnce({ count: 0 });
 
-    await expect(updateGoalStatus("missing", { status: GoalStatus.PAUSADA })).rejects.toThrow(GoalStatusNotFoundError);
+    await expect(updateGoalStatus("missing", { status: GoalStatus.PAUSADA }, "user-demo")).rejects.toThrow(GoalStatusNotFoundError);
   });
 });
 

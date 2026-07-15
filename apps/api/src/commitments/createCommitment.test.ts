@@ -47,7 +47,7 @@ describe("createCommitment", () => {
       month: "2026-08",
       fechaVencimiento: "2026-08-12",
       notas: "Fibra hogar",
-    });
+    }, "user-demo");
 
     expect(result).toMatchObject({ id: "commitment-internet", nombre: "Internet", estado: CommitmentStatus.PENDIENTE });
     expect(createCommitmentRecord).toHaveBeenCalledWith({
@@ -61,6 +61,7 @@ describe("createCommitment", () => {
         anio: 2026,
         notas: "Fibra hogar",
         templateId: null,
+        userId: "user-demo",
       },
     });
     expect(createTransaction).not.toHaveBeenCalled();
@@ -75,7 +76,7 @@ describe("createCommitment", () => {
       monto: 29_990,
       fechaVencimiento: "2026-07-12",
       notas: "Fibra hogar",
-    });
+    }, "user-demo");
 
     expect(createCommitmentRecord).toHaveBeenCalledWith({
       data: {
@@ -88,6 +89,7 @@ describe("createCommitment", () => {
         anio: 2026,
         notas: "Fibra hogar",
         templateId: null,
+        userId: "user-demo",
       },
     });
     expect(createTransaction).not.toHaveBeenCalled();
@@ -102,7 +104,7 @@ describe("createCommitment", () => {
       monto: 50_000,
       estado: "PAGADO",
       fechaVencimiento: "2026-07-25",
-    });
+    }, "user-demo");
 
     expect(createCommitmentRecord).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ tipo: CommitmentType.DEUDA, estado: CommitmentStatus.PAGADO, mes: 7, anio: 2026 }),
@@ -123,7 +125,7 @@ describe("createCommitment", () => {
     { payload: { nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, month: "2026-13", fechaVencimiento: "2026-07-10" }, message: "Invalid commitment month format. Use YYYY-MM." },
     { payload: { nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, fechaVencimiento: "2026-07-32" }, message: "Invalid due date." },
   ])("rejects invalid create payloads", async ({ payload, message }) => {
-    await expect(createCommitment(payload)).rejects.toThrow(new CommitmentCreateValidationError(message));
+    await expect(createCommitment(payload, "user-demo")).rejects.toThrow(new CommitmentCreateValidationError(message));
 
     expect(createCommitmentRecord).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -141,6 +143,7 @@ function commitment(overrides: Partial<Commitment> & { id: string; nombre: strin
     mes: 7,
     anio: 2026,
     notas: null,
+    userId: "user-demo",
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     templateId: null,

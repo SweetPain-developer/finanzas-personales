@@ -206,24 +206,31 @@ describe("GET /dashboard", () => {
       ReturnType<typeof getDashboardData>
     >);
 
-    const response = await request(app).get("/dashboard").expect(200);
+    const response = await request(app).get("/dashboard").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({ currentMonthLabel: "Julio 2026" });
-    expect(mockedGetDashboardData).toHaveBeenCalledWith(undefined);
+    expect(mockedGetDashboardData).toHaveBeenCalledWith("user-demo", undefined);
   });
 
   it("rejects invalid month values with 400", async () => {
     mockedGetDashboardData.mockRejectedValueOnce(new Error("Invalid month format. Use YYYY-MM."));
 
-    const response = await request(app).get("/dashboard?month=2026-13").expect(400);
+    const response = await request(app).get("/dashboard?month=2026-13").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Invalid month format. Use YYYY-MM." });
   });
 
   it("rejects repeated month query values with 400", async () => {
-    const response = await request(app).get("/dashboard?month=2026-07&month=2026-08").expect(400);
+    const response = await request(app).get("/dashboard?month=2026-07&month=2026-08").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Repeated month query values are not allowed." });
+    expect(mockedGetDashboardData).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/dashboard").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
     expect(mockedGetDashboardData).not.toHaveBeenCalled();
   });
 });
@@ -304,9 +311,10 @@ describe("POST /accounts", () => {
       nombre: "Ahorro demo",
       tipo: AccountType.AHORRO,
       saldo: 150_000,
-      activa: true,
-      notas: null,
-      orden: 0,
+       activa: true,
+       notas: null,
+       userId: "user-demo",
+       orden: 0,
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     });
@@ -343,9 +351,10 @@ describe("PATCH /accounts/:id", () => {
       nombre: "Cuenta Demo Principal",
       tipo: AccountType.OPERATIVA,
       saldo: 460_000,
-      activa: true,
-      notas: null,
-      orden: 0,
+       activa: true,
+       notas: null,
+       userId: "user-demo",
+       orden: 0,
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
@@ -435,9 +444,10 @@ describe("PATCH /accounts/:id/deactivate", () => {
       nombre: "Cuenta Demo Principal",
       tipo: AccountType.OPERATIVA,
       saldo: 450_200,
-      activa: false,
-      notas: null,
-      orden: 0,
+       activa: false,
+       notas: null,
+       userId: "user-demo",
+       orden: 0,
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
@@ -481,9 +491,10 @@ describe("PATCH /accounts/:id/reactivate", () => {
       nombre: "Cuenta Demo Principal",
       tipo: AccountType.OPERATIVA,
       saldo: 450_200,
-      activa: true,
-      notas: null,
-      orden: 0,
+       activa: true,
+       notas: null,
+       userId: "user-demo",
+       orden: 0,
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
     });
@@ -542,7 +553,7 @@ describe("GET /goals", () => {
       ],
     });
 
-    const response = await request(app).get("/goals").expect(200);
+    const response = await request(app).get("/goals").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({
       groups: [
@@ -563,17 +574,17 @@ describe("GET /goals", () => {
         },
       ],
     });
-    expect(mockedGetGoals).toHaveBeenCalledOnce();
+    expect(mockedGetGoals).toHaveBeenCalledWith("user-demo");
   });
 
   it("returns 500 when goal groups cannot be loaded", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mockedGetGoals.mockRejectedValueOnce(new Error("Database unavailable"));
 
-    const response = await request(app).get("/goals").expect(500);
+    const response = await request(app).get("/goals").set("Cookie", authCookie).expect(500);
 
     expect(response.body).toEqual({ error: "Internal server error" });
-    expect(mockedGetGoals).toHaveBeenCalledOnce();
+    expect(mockedGetGoals).toHaveBeenCalledWith("user-demo");
     consoleError.mockRestore();
   });
 });
@@ -587,7 +598,7 @@ describe("POST /goals", () => {
     const payload = { name: "Vacaciones", targetAmount: 500_000, accountId: "account-demo-wallet", notes: "Viaje demo" };
     mockedCreateGoal.mockResolvedValueOnce(goalResponse({ notas: "Viaje demo" }));
 
-    const response = await request(app).post("/goals").send(payload).expect(201);
+    const response = await request(app).post("/goals").set("Cookie", authCookie).send(payload).expect(201);
 
     expect(response.body.goal).toEqual({
       id: "goal-vacations",
@@ -598,11 +609,11 @@ describe("POST /goals", () => {
       account: { id: "account-demo-wallet", nombre: "Billetera Demo", saldo: 225_000 },
       progressPercent: 45,
     });
-    expect(mockedCreateGoal).toHaveBeenCalledWith(payload);
+    expect(mockedCreateGoal).toHaveBeenCalledWith(payload, "user-demo");
   });
 
   it("returns 400 for an invalid payload", async () => {
-    const response = await request(app).post("/goals").send({ name: "", targetAmount: 0, accountId: "" }).expect(400);
+    const response = await request(app).post("/goals").set("Cookie", authCookie).send({ name: "", targetAmount: 0, accountId: "" }).expect(400);
 
     expect(response.body.error).toBe("Invalid request body");
     expect(mockedCreateGoal).not.toHaveBeenCalled();
@@ -611,7 +622,7 @@ describe("POST /goals", () => {
   it("returns 400 when the associated account is invalid", async () => {
     mockedCreateGoal.mockRejectedValueOnce(new GoalValidationError("La cuenta asociada debe estar activa."));
 
-    const response = await request(app).post("/goals").send({ name: "Auto", targetAmount: 1_000_000, accountId: "inactive" }).expect(400);
+    const response = await request(app).post("/goals").set("Cookie", authCookie).send({ name: "Auto", targetAmount: 1_000_000, accountId: "inactive" }).expect(400);
 
     expect(response.body).toEqual({ error: "La cuenta asociada debe estar activa." });
   });
@@ -626,7 +637,7 @@ describe("PATCH /goals/:id", () => {
     const payload = { name: "Vacaciones 2027", targetAmount: 750_000, accountId: "account-demo-wallet", notes: null };
     mockedUpdateGoal.mockResolvedValueOnce(goalResponse({ nombre: "Vacaciones 2027", montoObjetivo: 750_000, notas: null, progressPercent: 30 }));
 
-    const response = await request(app).patch("/goals/goal-vacations").send(payload).expect(200);
+    const response = await request(app).patch("/goals/goal-vacations").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body.goal).toMatchObject({
       id: "goal-vacations",
@@ -635,22 +646,22 @@ describe("PATCH /goals/:id", () => {
       notas: null,
       progressPercent: 30,
     });
-    expect(mockedUpdateGoal).toHaveBeenCalledWith("goal-vacations", payload);
+    expect(mockedUpdateGoal).toHaveBeenCalledWith("goal-vacations", payload, "user-demo");
   });
 
   it("allows updating a goal without notes", async () => {
     const payload = { name: "Vacaciones 2027", targetAmount: 750_000, accountId: "account-demo-wallet" };
     mockedUpdateGoal.mockResolvedValueOnce(goalResponse({ nombre: "Vacaciones 2027", montoObjetivo: 750_000, notas: "Viaje demo", progressPercent: 30 }));
 
-    await request(app).patch("/goals/goal-vacations").send(payload).expect(200);
+    await request(app).patch("/goals/goal-vacations").set("Cookie", authCookie).send(payload).expect(200);
 
-    expect(mockedUpdateGoal).toHaveBeenCalledWith("goal-vacations", payload);
+    expect(mockedUpdateGoal).toHaveBeenCalledWith("goal-vacations", payload, "user-demo");
   });
 
   it("returns 404 when the goal does not exist", async () => {
     mockedUpdateGoal.mockRejectedValueOnce(new GoalNotFoundError("Meta no encontrada."));
 
-    const response = await request(app).patch("/goals/missing").send({ name: "Auto", targetAmount: 1_000_000, accountId: "account-demo-wallet" }).expect(404);
+    const response = await request(app).patch("/goals/missing").set("Cookie", authCookie).send({ name: "Auto", targetAmount: 1_000_000, accountId: "account-demo-wallet" }).expect(404);
 
     expect(response.body).toEqual({ error: "Meta no encontrada." });
   });
@@ -664,15 +675,15 @@ describe("PATCH /goals/:id/status", () => {
   it.each([GoalStatus.ACTIVA, GoalStatus.PAUSADA, GoalStatus.COMPLETADA])("updates goal status to %s", async (status) => {
     mockedUpdateGoalStatus.mockResolvedValueOnce(goalResponse({ estado: status }));
 
-    const response = await request(app).patch("/goals/goal-vacations/status").send({ status }).expect(200);
+    const response = await request(app).patch("/goals/goal-vacations/status").set("Cookie", authCookie).send({ status }).expect(200);
 
     expect(response.body.goal.estado).toBe(status);
     expect(response.body.goal.progressPercent).toBe(45);
-    expect(mockedUpdateGoalStatus).toHaveBeenCalledWith("goal-vacations", { status });
+    expect(mockedUpdateGoalStatus).toHaveBeenCalledWith("goal-vacations", { status }, "user-demo");
   });
 
   it("returns 400 for an invalid status", async () => {
-    const response = await request(app).patch("/goals/goal-vacations/status").send({ status: "ARCHIVADA" }).expect(400);
+    const response = await request(app).patch("/goals/goal-vacations/status").set("Cookie", authCookie).send({ status: "ARCHIVADA" }).expect(400);
 
     expect(response.body.error).toBe("Invalid request body");
     expect(mockedUpdateGoalStatus).not.toHaveBeenCalled();
@@ -681,7 +692,7 @@ describe("PATCH /goals/:id/status", () => {
   it("returns 404 when the goal does not exist", async () => {
     mockedUpdateGoalStatus.mockRejectedValueOnce(new GoalStatusNotFoundError("Meta no encontrada."));
 
-    const response = await request(app).patch("/goals/missing/status").send({ status: "PAUSADA" }).expect(404);
+    const response = await request(app).patch("/goals/missing/status").set("Cookie", authCookie).send({ status: "PAUSADA" }).expect(404);
 
     expect(response.body).toEqual({ error: "Meta no encontrada." });
   });
@@ -695,15 +706,15 @@ describe("DELETE /goals/:id", () => {
   it("deletes a goal and returns no content", async () => {
     mockedDeleteGoal.mockResolvedValueOnce(undefined);
 
-    await request(app).delete("/goals/goal-vacations").expect(204);
+    await request(app).delete("/goals/goal-vacations").set("Cookie", authCookie).expect(204);
 
-    expect(mockedDeleteGoal).toHaveBeenCalledWith("goal-vacations");
+    expect(mockedDeleteGoal).toHaveBeenCalledWith("goal-vacations", "user-demo");
   });
 
   it("returns 404 when the goal does not exist", async () => {
     mockedDeleteGoal.mockRejectedValueOnce(new GoalDeleteNotFoundError("Meta no encontrada."));
 
-    const response = await request(app).delete("/goals/missing").expect(404);
+    const response = await request(app).delete("/goals/missing").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Meta no encontrada." });
   });
@@ -742,7 +753,7 @@ describe("GET /commitments", () => {
       ],
     });
 
-    const response = await request(app).get("/commitments?month=2026-07").expect(200);
+    const response = await request(app).get("/commitments?month=2026-07").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({
       currentMonth: "2026-07",
@@ -770,29 +781,36 @@ describe("GET /commitments", () => {
         { status: "PAGADO", label: "Pagados", commitments: [] },
       ],
     });
-    expect(mockedGetCommitments).toHaveBeenCalledWith("2026-07");
+    expect(mockedGetCommitments).toHaveBeenCalledWith("user-demo", "2026-07");
   });
 
   it("uses the default commitments month when month is omitted", async () => {
     mockedGetCommitments.mockResolvedValueOnce({ currentMonth: "2026-07", currentMonthLabel: "Julio 2026", summary: { pendingCount: 0, pendingTotal: 0 }, groups: [] });
 
-    await request(app).get("/commitments").expect(200);
+    await request(app).get("/commitments").set("Cookie", authCookie).expect(200);
 
-    expect(mockedGetCommitments).toHaveBeenCalledWith(undefined);
+    expect(mockedGetCommitments).toHaveBeenCalledWith("user-demo", undefined);
   });
 
   it("returns 400 for invalid commitment month values", async () => {
     mockedGetCommitments.mockRejectedValueOnce(new CommitmentValidationError("Invalid month format. Use YYYY-MM."));
 
-    const response = await request(app).get("/commitments?month=2026-13").expect(400);
+    const response = await request(app).get("/commitments?month=2026-13").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Invalid month format. Use YYYY-MM." });
   });
 
   it("rejects repeated commitment month values with 400", async () => {
-    const response = await request(app).get("/commitments?month=2026-07&month=2026-08").expect(400);
+    const response = await request(app).get("/commitments?month=2026-07&month=2026-08").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Repeated month query values are not allowed." });
+    expect(mockedGetCommitments).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const response = await request(app).get("/commitments").expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
     expect(mockedGetCommitments).not.toHaveBeenCalled();
   });
 });
@@ -814,7 +832,7 @@ describe("commitment template routes", () => {
       { id: "template-play", nombre: "Play", tipo: CommitmentType.RECURRENTE, montoDefault: 7_000, diaVencimiento: 20, activa: false, notas: null },
     ]);
 
-    const response = await request(app).get("/commitment-templates").expect(200);
+    const response = await request(app).get("/commitment-templates").set("Cookie", authCookie).expect(200);
 
     expect(response.body).toEqual({
       templates: [
@@ -822,16 +840,17 @@ describe("commitment template routes", () => {
         { id: "template-play", nombre: "Play", tipo: "RECURRENTE", montoDefault: 7000, diaVencimiento: 20, activa: false, notas: null },
       ],
     });
+    expect(mockedGetCommitmentTemplates).toHaveBeenCalledWith("user-demo");
   });
 
   it("creates a commitment template", async () => {
     const payload = { nombre: "Internet", tipo: "RECURRENTE", montoDefault: 29_990, diaVencimiento: 12, notas: "Fibra hogar" };
     mockedCreateCommitmentTemplate.mockResolvedValueOnce({ id: "template-internet", nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 29_990, diaVencimiento: 12, activa: true, notas: "Fibra hogar" });
 
-    const response = await request(app).post("/commitment-templates").send(payload).expect(201);
+    const response = await request(app).post("/commitment-templates").set("Cookie", authCookie).send(payload).expect(201);
 
     expect(response.body.template).toEqual({ id: "template-internet", nombre: "Internet", tipo: "RECURRENTE", montoDefault: 29990, diaVencimiento: 12, activa: true, notas: "Fibra hogar" });
-    expect(mockedCreateCommitmentTemplate).toHaveBeenCalledWith(payload);
+    expect(mockedCreateCommitmentTemplate).toHaveBeenCalledWith(payload, "user-demo");
     expect(mockedGetCommitments).not.toHaveBeenCalled();
     expect(mockedCreateTransaction).not.toHaveBeenCalled();
   });
@@ -839,7 +858,7 @@ describe("commitment template routes", () => {
   it("returns 400 for template create validation errors", async () => {
     mockedCreateCommitmentTemplate.mockRejectedValueOnce(new CommitmentTemplateValidationError("montoDefault must be an integer greater than zero."));
 
-    const response = await request(app).post("/commitment-templates").send({ nombre: "Internet", tipo: "RECURRENTE", montoDefault: 0 }).expect(400);
+    const response = await request(app).post("/commitment-templates").set("Cookie", authCookie).send({ nombre: "Internet", tipo: "RECURRENTE", montoDefault: 0 }).expect(400);
 
     expect(response.body).toEqual({ error: "montoDefault must be an integer greater than zero." });
   });
@@ -855,7 +874,7 @@ describe("commitment template routes", () => {
       notas: null,
     });
 
-    const response = await request(app).patch("/commitment-templates/template-rent").send({ activa: false }).expect(200);
+    const response = await request(app).patch("/commitment-templates/template-rent").set("Cookie", authCookie).send({ activa: false }).expect(200);
 
     expect(response.body.template).toEqual({
       id: "template-rent",
@@ -866,7 +885,7 @@ describe("commitment template routes", () => {
       activa: false,
       notas: null,
     });
-    expect(mockedUpdateCommitmentTemplateActive).toHaveBeenCalledWith("template-rent", { activa: false });
+    expect(mockedUpdateCommitmentTemplateActive).toHaveBeenCalledWith("template-rent", { activa: false }, "user-demo");
     expect(mockedGetCommitments).not.toHaveBeenCalled();
     expect(mockedCreateTransaction).not.toHaveBeenCalled();
   });
@@ -875,10 +894,10 @@ describe("commitment template routes", () => {
     const payload = { nombre: "Arriendo casa", tipo: "RECURRENTE", montoDefault: 360_000, diaVencimiento: 8, notas: "Reajuste", activa: false };
     mockedUpdateCommitmentTemplate.mockResolvedValueOnce({ id: "template-rent", nombre: "Arriendo casa", tipo: CommitmentType.RECURRENTE, montoDefault: 360_000, diaVencimiento: 8, activa: false, notas: "Reajuste" });
 
-    const response = await request(app).patch("/commitment-templates/template-rent").send(payload).expect(200);
+    const response = await request(app).patch("/commitment-templates/template-rent").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body.template).toEqual({ id: "template-rent", nombre: "Arriendo casa", tipo: "RECURRENTE", montoDefault: 360000, diaVencimiento: 8, activa: false, notas: "Reajuste" });
-    expect(mockedUpdateCommitmentTemplate).toHaveBeenCalledWith("template-rent", payload);
+    expect(mockedUpdateCommitmentTemplate).toHaveBeenCalledWith("template-rent", payload, "user-demo");
     expect(mockedUpdateCommitmentTemplateActive).not.toHaveBeenCalled();
     expect(mockedGetCommitments).not.toHaveBeenCalled();
     expect(mockedCreateTransaction).not.toHaveBeenCalled();
@@ -887,7 +906,7 @@ describe("commitment template routes", () => {
   it("returns 404 instead of 500 when a template does not exist", async () => {
     mockedUpdateCommitmentTemplateActive.mockRejectedValueOnce(new CommitmentTemplateNotFoundError("Commitment template not found."));
 
-    const response = await request(app).patch("/commitment-templates/missing").send({ activa: false }).expect(404);
+    const response = await request(app).patch("/commitment-templates/missing").set("Cookie", authCookie).send({ activa: false }).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment template not found." });
   });
@@ -895,7 +914,7 @@ describe("commitment template routes", () => {
   it("returns 404 for missing template edits", async () => {
     mockedUpdateCommitmentTemplate.mockRejectedValueOnce(new CommitmentTemplateNotFoundError("Commitment template not found."));
 
-    const response = await request(app).patch("/commitment-templates/missing").send({ nombre: "Internet", tipo: "RECURRENTE", montoDefault: 29_990, diaVencimiento: null }).expect(404);
+    const response = await request(app).patch("/commitment-templates/missing").set("Cookie", authCookie).send({ nombre: "Internet", tipo: "RECURRENTE", montoDefault: 29_990, diaVencimiento: null }).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment template not found." });
   });
@@ -903,7 +922,7 @@ describe("commitment template routes", () => {
   it("returns 400 for invalid active-state payloads", async () => {
     mockedUpdateCommitmentTemplateActive.mockRejectedValueOnce(new CommitmentTemplateValidationError("activa must be a boolean."));
 
-    const response = await request(app).patch("/commitment-templates/template-rent").send({ activa: "false" }).expect(400);
+    const response = await request(app).patch("/commitment-templates/template-rent").set("Cookie", authCookie).send({ activa: "false" }).expect(400);
 
     expect(response.body).toEqual({ error: "activa must be a boolean." });
   });
@@ -911,9 +930,9 @@ describe("commitment template routes", () => {
   it("deletes a commitment template and returns no content", async () => {
     mockedDeleteCommitmentTemplate.mockResolvedValueOnce(undefined);
 
-    await request(app).delete("/commitment-templates/template-play").expect(204);
+    await request(app).delete("/commitment-templates/template-play").set("Cookie", authCookie).expect(204);
 
-    expect(mockedDeleteCommitmentTemplate).toHaveBeenCalledWith("template-play");
+    expect(mockedDeleteCommitmentTemplate).toHaveBeenCalledWith("template-play", "user-demo");
     expect(mockedGetCommitments).not.toHaveBeenCalled();
     expect(mockedCreateTransaction).not.toHaveBeenCalled();
   });
@@ -921,7 +940,7 @@ describe("commitment template routes", () => {
   it("returns 404 for missing template deletion", async () => {
     mockedDeleteCommitmentTemplate.mockRejectedValueOnce(new CommitmentTemplateNotFoundError("Commitment template not found."));
 
-    const response = await request(app).delete("/commitment-templates/missing").expect(404);
+    const response = await request(app).delete("/commitment-templates/missing").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment template not found." });
   });
@@ -929,7 +948,7 @@ describe("commitment template routes", () => {
   it("returns 409 when deleting a template that generated commitments", async () => {
     mockedDeleteCommitmentTemplate.mockRejectedValueOnce(new CommitmentTemplateDeleteConflictError("Commitment template has generated commitments."));
 
-    const response = await request(app).delete("/commitment-templates/template-rent").expect(409);
+    const response = await request(app).delete("/commitment-templates/template-rent").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Commitment template has generated commitments." });
   });
@@ -949,9 +968,10 @@ describe("PATCH /commitments/:id/pay", () => {
       estado: CommitmentStatus.PAGADO,
       fechaVencimiento: new Date("2026-07-05T00:00:00.000Z"),
       mes: 7,
-      anio: 2026,
-      notas: null,
-      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+       anio: 2026,
+       notas: null,
+       userId: "user-demo",
+       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-05T00:00:00.000Z"),
       templateId: null,
       paymentTransactionId: "transaction-payment",
@@ -959,16 +979,16 @@ describe("PATCH /commitments/:id/pay", () => {
 
     const paymentPayload = { accountId: "account-demo-primary", categoryId: "category-services" };
 
-    const response = await request(app).patch("/commitments/commitment-rent/pay").send(paymentPayload).expect(200);
+    const response = await request(app).patch("/commitments/commitment-rent/pay").set("Cookie", authCookie).send(paymentPayload).expect(200);
 
     expect(response.body.commitment).toMatchObject({ id: "commitment-rent", estado: "PAGADO" });
-    expect(mockedMarkCommitmentPaid).toHaveBeenCalledWith("commitment-rent", paymentPayload);
+    expect(mockedMarkCommitmentPaid).toHaveBeenCalledWith("commitment-rent", paymentPayload, "user-demo");
   });
 
   it("returns 404 when the commitment does not exist", async () => {
     mockedMarkCommitmentPaid.mockRejectedValueOnce(new CommitmentNotFoundError("Commitment not found."));
 
-    const response = await request(app).patch("/commitments/missing/pay").expect(404);
+    const response = await request(app).patch("/commitments/missing/pay").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment not found." });
   });
@@ -976,7 +996,7 @@ describe("PATCH /commitments/:id/pay", () => {
   it("returns 400 for invalid payment input", async () => {
     mockedMarkCommitmentPaid.mockRejectedValueOnce(new CommitmentPaymentValidationError("Account not found or inactive."));
 
-    const response = await request(app).patch("/commitments/commitment-rent/pay").send({ accountId: "missing", categoryId: "category-services" }).expect(400);
+    const response = await request(app).patch("/commitments/commitment-rent/pay").set("Cookie", authCookie).send({ accountId: "missing", categoryId: "category-services" }).expect(400);
 
     expect(response.body).toEqual({ error: "Account not found or inactive." });
   });
@@ -989,7 +1009,7 @@ describe("PATCH /commitments/:id/pay", () => {
   ])("returns 400 instead of 500 for malformed payment payloads", async ({ payload, message }) => {
     mockedMarkCommitmentPaid.mockRejectedValueOnce(new CommitmentPaymentValidationError(message));
 
-    const response = await request(app).patch("/commitments/commitment-rent/pay").send(payload).expect(400);
+    const response = await request(app).patch("/commitments/commitment-rent/pay").set("Cookie", authCookie).send(payload).expect(400);
 
     expect(response.body).toEqual({ error: message });
   });
@@ -1003,9 +1023,10 @@ describe("PATCH /commitments/:id/pay", () => {
       estado: CommitmentStatus.PAGADO,
       fechaVencimiento: new Date("2026-07-03T00:00:00.000Z"),
       mes: 7,
-      anio: 2026,
-      notas: null,
-      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+       anio: 2026,
+       notas: null,
+       userId: "user-demo",
+       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
       templateId: null,
       paymentTransactionId: "transaction-payment",
@@ -1013,10 +1034,10 @@ describe("PATCH /commitments/:id/pay", () => {
 
     const paymentPayload = { accountId: "account-demo-primary", categoryId: "category-services" };
 
-    const response = await request(app).patch("/commitments/commitment-phone/pay").send(paymentPayload).expect(200);
+    const response = await request(app).patch("/commitments/commitment-phone/pay").set("Cookie", authCookie).send(paymentPayload).expect(200);
 
     expect(response.body.commitment.estado).toBe("PAGADO");
-    expect(mockedMarkCommitmentPaid).toHaveBeenCalledWith("commitment-phone", paymentPayload);
+    expect(mockedMarkCommitmentPaid).toHaveBeenCalledWith("commitment-phone", paymentPayload, "user-demo");
   });
 });
 
@@ -1034,24 +1055,25 @@ describe("PATCH /commitments/:id/unpay", () => {
       estado: CommitmentStatus.PENDIENTE,
       fechaVencimiento: new Date("2026-07-05T00:00:00.000Z"),
       mes: 7,
-      anio: 2026,
-      notas: null,
-      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+       anio: 2026,
+       notas: null,
+       userId: "user-demo",
+       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-05T00:00:00.000Z"),
       templateId: null,
       paymentTransactionId: null,
     });
 
-    const response = await request(app).patch("/commitments/commitment-rent/unpay").expect(200);
+    const response = await request(app).patch("/commitments/commitment-rent/unpay").set("Cookie", authCookie).expect(200);
 
     expect(response.body.commitment).toMatchObject({ id: "commitment-rent", estado: "PENDIENTE" });
-    expect(mockedMarkCommitmentUnpaid).toHaveBeenCalledWith("commitment-rent");
+    expect(mockedMarkCommitmentUnpaid).toHaveBeenCalledWith("commitment-rent", "user-demo");
   });
 
   it("returns 400 when reverting an unpaid commitment", async () => {
     mockedMarkCommitmentUnpaid.mockRejectedValueOnce(new CommitmentPaymentValidationError("Only paid commitments can be reverted."));
 
-    const response = await request(app).patch("/commitments/commitment-rent/unpay").expect(400);
+    const response = await request(app).patch("/commitments/commitment-rent/unpay").set("Cookie", authCookie).expect(400);
 
     expect(response.body).toEqual({ error: "Only paid commitments can be reverted." });
   });
@@ -1059,7 +1081,7 @@ describe("PATCH /commitments/:id/unpay", () => {
   it("returns 409 when the linked payment transaction is missing", async () => {
     mockedMarkCommitmentUnpaid.mockRejectedValueOnce(new CommitmentPaymentConflictError("Linked payment transaction not found."));
 
-    const response = await request(app).patch("/commitments/commitment-rent/unpay").expect(409);
+    const response = await request(app).patch("/commitments/commitment-rent/unpay").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Linked payment transaction not found." });
   });
@@ -1080,15 +1102,16 @@ describe("POST /commitments", () => {
       estado: CommitmentStatus.PENDIENTE,
       fechaVencimiento: new Date("2026-07-12T00:00:00.000Z"),
       mes: 7,
-      anio: 2026,
-      notas: "Fibra hogar",
-      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+       anio: 2026,
+       notas: "Fibra hogar",
+       userId: "user-demo",
+       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
       templateId: null,
       paymentTransactionId: null,
     });
 
-    const response = await request(app).post("/commitments").send(payload).expect(201);
+    const response = await request(app).post("/commitments").set("Cookie", authCookie).send(payload).expect(201);
 
     expect(response.body.commitment).toMatchObject({
       id: "commitment-internet",
@@ -1097,13 +1120,13 @@ describe("POST /commitments", () => {
       monto: 29_990,
       estado: "PENDIENTE",
     });
-    expect(mockedCreateCommitment).toHaveBeenCalledWith(payload);
+    expect(mockedCreateCommitment).toHaveBeenCalledWith(payload, "user-demo");
   });
 
   it("returns 400 for commitment validation errors", async () => {
     mockedCreateCommitment.mockRejectedValueOnce(new CommitmentCreateValidationError("Amount must be an integer greater than zero."));
 
-    const response = await request(app).post("/commitments").send({ nombre: "Internet", tipo: "RECURRENTE", monto: 0 }).expect(400);
+    const response = await request(app).post("/commitments").set("Cookie", authCookie).send({ nombre: "Internet", tipo: "RECURRENTE", monto: 0 }).expect(400);
 
     expect(response.body).toEqual({ error: "Amount must be an integer greater than zero." });
   });
@@ -1112,7 +1135,7 @@ describe("POST /commitments", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mockedCreateCommitment.mockRejectedValueOnce(new Error("Database unavailable"));
 
-    const response = await request(app).post("/commitments").send({ nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, fechaVencimiento: "2026-07-10" }).expect(500);
+    const response = await request(app).post("/commitments").set("Cookie", authCookie).send({ nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, fechaVencimiento: "2026-07-10" }).expect(500);
 
     expect(response.body).toEqual({ error: "Internal server error" });
     consoleError.mockRestore();
@@ -1134,24 +1157,25 @@ describe("PATCH /commitments/:id", () => {
       estado: CommitmentStatus.PENDIENTE,
       fechaVencimiento: new Date("2026-07-18T00:00:00.000Z"),
       mes: 7,
-      anio: 2026,
-      notas: "Boleta ajustada",
-      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+       anio: 2026,
+       notas: "Boleta ajustada",
+       userId: "user-demo",
+       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-08T00:00:00.000Z"),
       templateId: null,
       paymentTransactionId: null,
     });
 
-    const response = await request(app).patch("/commitments/commitment-light").send(payload).expect(200);
+    const response = await request(app).patch("/commitments/commitment-light").set("Cookie", authCookie).send(payload).expect(200);
 
     expect(response.body.commitment).toMatchObject({ id: "commitment-light", nombre: "Luz casa", tipo: "VARIABLE", monto: 52_000 });
-    expect(mockedUpdateCommitment).toHaveBeenCalledWith("commitment-light", payload);
+    expect(mockedUpdateCommitment).toHaveBeenCalledWith("commitment-light", payload, "user-demo");
   });
 
   it("returns 404 when the commitment does not exist", async () => {
     mockedUpdateCommitment.mockRejectedValueOnce(new CommitmentUpdateNotFoundError("Commitment not found."));
 
-    const response = await request(app).patch("/commitments/missing").send({ nombre: "Internet", tipo: "RECURRENTE", monto: 29_990, fechaVencimiento: "2026-07-12" }).expect(404);
+    const response = await request(app).patch("/commitments/missing").set("Cookie", authCookie).send({ nombre: "Internet", tipo: "RECURRENTE", monto: 29_990, fechaVencimiento: "2026-07-12" }).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment not found." });
   });
@@ -1159,7 +1183,7 @@ describe("PATCH /commitments/:id", () => {
   it("returns 400 for commitment update validation errors", async () => {
     mockedUpdateCommitment.mockRejectedValueOnce(new CommitmentUpdateValidationError("Amount must be an integer greater than zero."));
 
-    const response = await request(app).patch("/commitments/commitment-light").send({ nombre: "Luz", tipo: "VARIABLE", monto: 0, fechaVencimiento: "2026-07-15" }).expect(400);
+    const response = await request(app).patch("/commitments/commitment-light").set("Cookie", authCookie).send({ nombre: "Luz", tipo: "VARIABLE", monto: 0, fechaVencimiento: "2026-07-15" }).expect(400);
 
     expect(response.body).toEqual({ error: "Amount must be an integer greater than zero." });
   });
@@ -1167,7 +1191,7 @@ describe("PATCH /commitments/:id", () => {
   it("returns 409 when attempting to edit a paid commitment", async () => {
     mockedUpdateCommitment.mockRejectedValueOnce(new CommitmentUpdateConflictError("Paid commitments cannot be edited."));
 
-    const response = await request(app).patch("/commitments/commitment-phone").send({ nombre: "Plan celular", tipo: "RECURRENTE", monto: 15_000, fechaVencimiento: "2026-07-03" }).expect(409);
+    const response = await request(app).patch("/commitments/commitment-phone").set("Cookie", authCookie).send({ nombre: "Plan celular", tipo: "RECURRENTE", monto: 15_000, fechaVencimiento: "2026-07-03" }).expect(409);
 
     expect(response.body).toEqual({ error: "Paid commitments cannot be edited." });
   });
@@ -1181,15 +1205,15 @@ describe("DELETE /commitments/:id", () => {
   it("deletes a pending commitment and returns no content", async () => {
     mockedDeleteCommitment.mockResolvedValueOnce(undefined);
 
-    await request(app).delete("/commitments/commitment-light").expect(204);
+    await request(app).delete("/commitments/commitment-light").set("Cookie", authCookie).expect(204);
 
-    expect(mockedDeleteCommitment).toHaveBeenCalledWith("commitment-light");
+    expect(mockedDeleteCommitment).toHaveBeenCalledWith("commitment-light", "user-demo");
   });
 
   it("returns 404 when the commitment does not exist", async () => {
     mockedDeleteCommitment.mockRejectedValueOnce(new CommitmentDeleteNotFoundError("Commitment not found."));
 
-    const response = await request(app).delete("/commitments/missing").expect(404);
+    const response = await request(app).delete("/commitments/missing").set("Cookie", authCookie).expect(404);
 
     expect(response.body).toEqual({ error: "Commitment not found." });
   });
@@ -1197,7 +1221,7 @@ describe("DELETE /commitments/:id", () => {
   it("returns 409 when attempting to delete a paid commitment", async () => {
     mockedDeleteCommitment.mockRejectedValueOnce(new CommitmentDeleteConflictError("Paid commitments cannot be deleted."));
 
-    const response = await request(app).delete("/commitments/commitment-phone").expect(409);
+    const response = await request(app).delete("/commitments/commitment-phone").set("Cookie", authCookie).expect(409);
 
     expect(response.body).toEqual({ error: "Paid commitments cannot be deleted." });
   });
@@ -1262,9 +1286,10 @@ describe("PATCH /movements/:id", () => {
       tipo: "GASTO",
       monto: 35_000,
       descripcion: "Compra ajustada",
-      fecha: new Date("2026-07-06T00:00:00.000Z"),
-      notas: null,
-      accountId: "account-demo-secondary",
+       fecha: new Date("2026-07-06T00:00:00.000Z"),
+       notas: null,
+       userId: "user-demo",
+       accountId: "account-demo-secondary",
       categoryId: "category-supermarket",
       transferId: null,
       createdAt: new Date("2026-07-05T12:00:00.000Z"),
@@ -1302,9 +1327,10 @@ describe("PATCH /movements/:id", () => {
         tipo: "GASTO",
         monto: 45_000,
         descripcion: "Ahorro",
-        fecha: new Date("2026-07-06T00:00:00.000Z"),
-        notas: null,
-        accountId: "account-origin",
+       fecha: new Date("2026-07-06T00:00:00.000Z"),
+       notas: null,
+       userId: "user-demo",
+       accountId: "account-origin",
         categoryId: null,
         transferId: "transfer-1",
         createdAt: new Date("2026-07-05T12:00:00.000Z"),
@@ -1315,9 +1341,10 @@ describe("PATCH /movements/:id", () => {
         tipo: "INGRESO",
         monto: 45_000,
         descripcion: "Ahorro",
-        fecha: new Date("2026-07-06T00:00:00.000Z"),
-        notas: null,
-        accountId: "account-destination",
+       fecha: new Date("2026-07-06T00:00:00.000Z"),
+       notas: null,
+       userId: "user-demo",
+       accountId: "account-destination",
         categoryId: null,
         transferId: "transfer-1",
         createdAt: new Date("2026-07-05T12:00:00.000Z"),
@@ -1465,9 +1492,10 @@ describe("POST /transactions", () => {
         tipo: "GASTO",
         monto: 1_000,
         descripcion: "Food",
-        fecha: new Date("2026-07-05T12:00:00.000Z"),
-        notas: null,
-        accountId: "account-checking",
+       fecha: new Date("2026-07-05T12:00:00.000Z"),
+       notas: null,
+       userId: "user-demo",
+       accountId: "account-checking",
         categoryId: "category-food",
         transferId: null,
         createdAt: new Date("2026-07-05T12:00:00.000Z"),

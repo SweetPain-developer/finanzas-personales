@@ -4,24 +4,17 @@ import type { GoalStatusUpdateDTO } from "@finanzas-personales/shared-types";
 import { prisma } from "../prisma.js";
 import { goalListSelect, type GoalListItem, toGoalListItem } from "./getGoals.js";
 
+const goalPrisma = prisma as any;
+
 export class GoalStatusNotFoundError extends Error {}
 
-export async function updateGoalStatus(id: string, data: GoalStatusUpdateDTO): Promise<GoalListItem> {
-  const goal = await prisma.goal.update({
-    where: { id },
-    data: { estado: data.status as GoalStatus },
-    select: goalListSelect,
-  }).catch((error: unknown) => {
-    if (isPrismaNotFoundError(error)) {
-      throw new GoalStatusNotFoundError("Meta no encontrada.");
-    }
+export async function updateGoalStatus(id: string, data: GoalStatusUpdateDTO, userId: string): Promise<GoalListItem> {
+  const updatedGoal = await goalPrisma.goal.updateMany({ where: { id, userId }, data: { estado: data.status as GoalStatus } });
 
-    throw error;
-  });
+  if (updatedGoal.count === 0) {
+    throw new GoalStatusNotFoundError("Meta no encontrada.");
+  }
 
+  const goal = await goalPrisma.goal.findFirstOrThrow({ where: { id, userId }, select: goalListSelect });
   return toGoalListItem(goal);
-}
-
-function isPrismaNotFoundError(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "P2025";
 }

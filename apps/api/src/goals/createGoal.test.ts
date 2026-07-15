@@ -24,7 +24,7 @@ describe("createGoal", () => {
     findUniqueAccount.mockResolvedValueOnce({ activa: true, tipo: AccountType.AHORRO });
     createGoalRecord.mockResolvedValueOnce(goalRecord({}));
 
-    const result = await createGoal({ name: "Vacaciones", targetAmount: 500_000, accountId: "account-demo-wallet", notes: "Viaje" });
+    const result = await createGoal({ name: "Vacaciones", targetAmount: 500_000, accountId: "account-demo-wallet", notes: "Viaje" }, "user-demo");
 
     expect(createGoalRecord).toHaveBeenCalledWith({
       data: {
@@ -33,6 +33,7 @@ describe("createGoal", () => {
         estado: GoalStatus.ACTIVA,
         notas: "Viaje",
         accountId: "account-demo-wallet",
+        userId: "user-demo",
       },
       select: expect.any(Object),
     });
@@ -42,13 +43,13 @@ describe("createGoal", () => {
 
   it("rejects missing, inactive, and non-savings goal accounts", async () => {
     findUniqueAccount.mockResolvedValueOnce(null);
-    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "missing", notes: null })).rejects.toThrow(GoalValidationError);
+    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "missing", notes: null }, "user-demo")).rejects.toThrow(GoalValidationError);
 
     findUniqueAccount.mockResolvedValueOnce({ activa: false, tipo: AccountType.AHORRO });
-    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "inactive", notes: null })).rejects.toThrow("La cuenta asociada debe estar activa.");
+    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "inactive", notes: null }, "user-demo")).rejects.toThrow("La cuenta asociada debe estar activa.");
 
     findUniqueAccount.mockResolvedValueOnce({ activa: true, tipo: AccountType.OPERATIVA });
-    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "operative", notes: null })).rejects.toThrow("La cuenta asociada debe ser de tipo ahorro o reserva.");
+    await expect(createGoal({ name: "Auto", targetAmount: 1_000_000, accountId: "operative", notes: null }, "user-demo")).rejects.toThrow("La cuenta asociada debe ser de tipo ahorro o reserva.");
   });
 });
 

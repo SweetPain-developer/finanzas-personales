@@ -77,7 +77,7 @@ describe("getDashboardData", () => {
       },
     ]);
 
-    const result = await getDashboardData("2026-07");
+    const result = await getDashboardData("user-demo", "2026-07");
 
     expect(result.monthlyIncome).toBe(2_000);
     expect(result.monthlyExpenses).toBe(750);
@@ -123,7 +123,7 @@ describe("getDashboardData", () => {
     findManyGoals.mockResolvedValue([]);
     findManyTransactions.mockResolvedValue([]);
 
-    const result = await getDashboardData("2026-07");
+    const result = await getDashboardData("user-demo", "2026-07");
 
     expect(result.availableToSpend).toBe(1_100);
     expect(result.liquidNetWorth).toBe(31_500);
@@ -155,7 +155,7 @@ describe("getDashboardData", () => {
       }),
     ]);
 
-    const result = await getDashboardData("2026-07");
+    const result = await getDashboardData("user-demo", "2026-07");
 
     expect(result.monthlyIncome).toBe(2_000);
     expect(result.monthlyExpenses).toBe(750);
@@ -212,12 +212,12 @@ describe("getDashboardData", () => {
       ])
       .mockResolvedValueOnce([transferOut, transferIn]);
 
-    const result = await getDashboardData("2026-07");
+    const result = await getDashboardData("user-demo", "2026-07");
 
     expect(findManyTransactions).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        where: { transferId: { in: ["transfer-split"] } },
+        where: { userId: "user-demo", transferId: { in: ["transfer-split"] } },
       }),
     );
     expect(result.recentTransactions).toHaveLength(5);
@@ -274,7 +274,7 @@ describe("getDashboardData", () => {
       }),
     ]);
 
-    const result = await getDashboardData("2026-07");
+    const result = await getDashboardData("user-demo", "2026-07");
 
     expect(result.recentTransactions.map((transaction) => transaction.id)).toEqual([
       "tx-normal-newer",

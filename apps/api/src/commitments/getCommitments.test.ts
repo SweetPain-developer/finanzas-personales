@@ -43,7 +43,7 @@ describe("getCommitments", () => {
       commitment({ id: "light", nombre: "Luz", tipo: CommitmentType.VARIABLE, monto: 45_000, estado: CommitmentStatus.PENDIENTE, fechaVencimiento: new Date("2026-07-15T00:00:00.000Z") }),
     ]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo", "2026-07");
 
     expect(result).toEqual({
       currentMonth: "2026-07",
@@ -75,8 +75,9 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo");
 
+    expect(result.currentMonth).toBe("2026-07");
     expect(result.summary).toEqual({ pendingCount: 0, pendingTotal: 0 });
     expect(result.groups).toEqual([
       { status: "PENDIENTE", label: "Pendientes", commitments: [] },
@@ -106,7 +107,7 @@ describe("getCommitments", () => {
       }),
     ]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo", "2026-07");
 
     expect(findManyCommitments).toHaveBeenLastCalledWith(expect.objectContaining({
       select: expect.objectContaining({ templateId: true }),
@@ -151,7 +152,7 @@ describe("getCommitments", () => {
       commitment({ id: "legacy-paid", monto: 15_000, estado: CommitmentStatus.PAGADO, paymentTransactionId: null, paymentTransaction: null }),
     ]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo", "2026-07");
 
     expect(result.groups[1]?.commitments).toEqual([
       expect.objectContaining({ id: "safe", canRevertPayment: true }),
@@ -174,10 +175,10 @@ describe("getCommitments", () => {
       commitment({ id: "middle", estado: CommitmentStatus.PENDIENTE, fechaVencimiento: new Date("2026-08-15T00:00:00.000Z") }),
     ]);
 
-    const result = await getCommitments("2026-08");
+    const result = await getCommitments("user-demo", "2026-08");
 
     expect(findManyCommitments).toHaveBeenLastCalledWith(expect.objectContaining({
-      where: { anio: 2026, mes: 8 },
+      where: { anio: 2026, mes: 8, userId: "user-demo" },
     }));
     expect(result.groups[0]?.commitments).toEqual([
       expect.objectContaining({ id: "early", dueDay: 5, fechaVencimiento: "2026-08-05" }),
@@ -187,7 +188,7 @@ describe("getCommitments", () => {
   });
 
   it("rejects invalid month values", async () => {
-    await expect(getCommitments("2026-13")).rejects.toThrow(new CommitmentValidationError("Invalid month format. Use YYYY-MM."));
+    await expect(getCommitments("user-demo", "2026-13")).rejects.toThrow(new CommitmentValidationError("Invalid month format. Use YYYY-MM."));
     expect(findManyCommitments).not.toHaveBeenCalled();
     expect(findManyCommitmentTemplates).not.toHaveBeenCalled();
   });
@@ -204,9 +205,9 @@ describe("getCommitments", () => {
       commitment({ id: "card", nombre: "Tarjeta demo", monto: 12_345, tipo: CommitmentType.DEUDA, fechaVencimiento: new Date("2026-07-12T00:00:00.000Z") }),
     ]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo", "2026-07");
 
-    expect(findManyCommitmentTemplates).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true } }));
+    expect(findManyCommitmentTemplates).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true, userId: "user-demo" } }));
     expect(createManyCommitments).toHaveBeenCalledWith({
       data: [
         {
@@ -219,6 +220,7 @@ describe("getCommitments", () => {
           anio: 2026,
           notas: null,
           templateId: "template-rent",
+          userId: "user-demo",
         },
         {
           nombre: "Tarjeta demo",
@@ -230,6 +232,7 @@ describe("getCommitments", () => {
           anio: 2026,
           notas: null,
           templateId: "template-card",
+          userId: "user-demo",
         },
       ],
       skipDuplicates: true,
@@ -252,7 +255,7 @@ describe("getCommitments", () => {
       commitment({ id: "streaming", nombre: "Streaming", monto: 12_000, fechaVencimiento: new Date("2026-07-20T00:00:00.000Z") }),
     ]);
 
-    await getCommitments("2026-07");
+    await getCommitments("user-demo", "2026-07");
 
     expect(createManyCommitments).toHaveBeenCalledWith({
       data: [expect.objectContaining({ nombre: "Streaming", templateId: "template-streaming" })],
@@ -272,8 +275,8 @@ describe("getCommitments", () => {
       .mockResolvedValueOnce([commitment({ id: "rent", nombre: "Arriendo", monto: 350_000 })]);
     createManyCommitments.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
 
-    await getCommitments("2026-07");
-    await getCommitments("2026-07");
+    await getCommitments("user-demo", "2026-07");
+    await getCommitments("user-demo", "2026-07");
 
     expect(createManyCommitments).toHaveBeenCalledTimes(2);
     expect(createManyCommitments).toHaveBeenNthCalledWith(1, {
@@ -292,9 +295,9 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([commitment({ id: "active", nombre: "Active", monto: 10_000 })]);
 
-    await getCommitments("2026-07");
+    await getCommitments("user-demo", "2026-07");
 
-    expect(findManyCommitmentTemplates).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true } }));
+    expect(findManyCommitmentTemplates).toHaveBeenCalledWith(expect.objectContaining({ where: { activa: true, userId: "user-demo" } }));
     expect(createManyCommitments).toHaveBeenCalledWith({ data: [expect.objectContaining({ templateId: "template-active" })], skipDuplicates: true });
   });
 
@@ -304,7 +307,7 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([commitment({ id: "no-due-date", fechaVencimiento: null })]);
 
-    const result = await getCommitments("2026-07");
+    const result = await getCommitments("user-demo", "2026-07");
 
     expect(createManyCommitments).toHaveBeenCalledWith({
       data: [expect.objectContaining({ fechaVencimiento: null, templateId: "template-no-due-date" })],
@@ -322,7 +325,7 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([commitment({ id: "end-of-month", fechaVencimiento: expectedDueDate })]);
 
-    await getCommitments(month);
+    await getCommitments("user-demo", month);
 
     expect(createManyCommitments).toHaveBeenCalledWith({
       data: [expect.objectContaining({ fechaVencimiento: expectedDueDate, templateId: "template-end-of-month" })],
@@ -339,7 +342,7 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([commitment({ id: "start-of-month", fechaVencimiento: expectedDueDate })]);
 
-    await getCommitments("2026-07");
+    await getCommitments("user-demo", "2026-07");
 
     expect(createManyCommitments).toHaveBeenCalledWith({
       data: [expect.objectContaining({ fechaVencimiento: expectedDueDate, templateId: "template-start-of-month" })],
@@ -353,7 +356,7 @@ describe("getCommitments", () => {
     findManyCommitments.mockResolvedValueOnce([]);
     findManyCommitments.mockResolvedValueOnce([commitment({ id: "rent" })]);
 
-    await getCommitments("2026-07");
+    await getCommitments("user-demo", "2026-07");
 
     expect(createManyCommitments).toHaveBeenCalledOnce();
     expect(createTransaction).not.toHaveBeenCalled();

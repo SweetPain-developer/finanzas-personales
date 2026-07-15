@@ -1,6 +1,8 @@
-import { CategoryType, CommitmentStatus, TransactionType, type Commitment, type Prisma } from "@prisma/client";
+import { CategoryType, CommitmentStatus, TransactionType, type Commitment } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
+
+const commitmentPrisma = prisma as any;
 
 export class CommitmentNotFoundError extends Error {
   constructor(message: string) {
@@ -28,8 +30,8 @@ type MarkCommitmentPaidInput = {
   categoryId: string;
 };
 
-export async function markCommitmentPaid(id: string, payload: unknown): Promise<Commitment> {
-  const commitment = await prisma.commitment.findUnique({ where: { id } });
+export async function markCommitmentPaid(id: string, payload: unknown, userId: string): Promise<Commitment> {
+  const commitment = await (commitmentPrisma.commitment.findFirst ?? commitmentPrisma.commitment.findUnique)({ where: { id, userId } });
 
   if (!commitment) {
     throw new CommitmentNotFoundError("Commitment not found.");
@@ -41,22 +43,26 @@ export async function markCommitmentPaid(id: string, payload: unknown): Promise<
 
   const input = parseMarkCommitmentPaidInput(payload);
 
-  return prisma.$transaction(async (tx) => {
+  return commitmentPrisma.$transaction(async (tx: any) => {
     const paidUpdate = await tx.commitment.updateMany({
-      where: { id, estado: CommitmentStatus.PENDIENTE },
+      where: { id, userId, estado: CommitmentStatus.PENDIENTE },
       data: { estado: CommitmentStatus.PAGADO },
     });
 
     if (paidUpdate.count === 0) {
-      return tx.commitment.findUniqueOrThrow({ where: { id } });
+      return tx.commitment.findFirstOrThrow({ where: { id, userId } });
     }
 
-    await validatePaymentReferences(tx, input);
+    await validatePaymentReferences(tx, input, userId);
 
-    await tx.account.update({
-      where: { id: input.accountId },
+    const accountUpdate = await tx.account.updateMany({
+      where: { id: input.accountId, userId, activa: true },
       data: { saldo: { decrement: commitment.monto } },
     });
+
+    if (accountUpdate.count !== 1) {
+      throw new CommitmentPaymentValidationError("Account not found or inactive.");
+    }
 
     const paymentTransaction = await tx.transaction.create({
       data: {
@@ -66,20 +72,25 @@ export async function markCommitmentPaid(id: string, payload: unknown): Promise<
         accountId: input.accountId,
         categoryId: input.categoryId,
         transferId: null,
+        userId,
       },
     });
 
-    await tx.commitment.update({
-      where: { id },
+    const paymentLinkUpdate = await tx.commitment.updateMany({
+      where: { id, userId, estado: CommitmentStatus.PAGADO, paymentTransactionId: null },
       data: { paymentTransactionId: paymentTransaction.id },
     });
 
-    return tx.commitment.findUniqueOrThrow({ where: { id } });
+    if (paymentLinkUpdate.count !== 1) {
+      throw new CommitmentPaymentConflictError("Commitment changed while recording payment.");
+    }
+
+    return (tx.commitment.findFirstOrThrow ?? tx.commitment.findUniqueOrThrow)({ where: { id, userId } });
   });
 }
 
-export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
-  const commitment = await prisma.commitment.findUnique({ where: { id } });
+export async function markCommitmentUnpaid(id: string, userId: string): Promise<Commitment> {
+  const commitment = await (commitmentPrisma.commitment.findFirst ?? commitmentPrisma.commitment.findUnique)({ where: { id, userId } });
 
   if (!commitment) {
     throw new CommitmentNotFoundError("Commitment not found.");
@@ -90,8 +101,8 @@ export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
   }
 
   try {
-    return await prisma.$transaction(async (tx) => {
-      const currentCommitment = await tx.commitment.findUnique({ where: { id } });
+    return await commitmentPrisma.$transaction(async (tx: any) => {
+      const currentCommitment = await (tx.commitment.findFirst ?? tx.commitment.findUnique)({ where: { id, userId } });
 
       if (!currentCommitment) {
         throw new CommitmentNotFoundError("Commitment not found.");
@@ -105,7 +116,7 @@ export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
         throw new CommitmentPaymentConflictError("Paid commitment has no linked payment transaction.");
       }
 
-      const paymentTransaction = await tx.transaction.findUnique({ where: { id: currentCommitment.paymentTransactionId } });
+      const paymentTransaction = await (tx.transaction.findFirst ?? tx.transaction.findUnique)({ where: { id: currentCommitment.paymentTransactionId, userId } });
 
       if (!paymentTransaction) {
         throw new CommitmentPaymentConflictError("Linked payment transaction not found.");
@@ -116,7 +127,7 @@ export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
       }
 
       const unpaidUpdate = await tx.commitment.updateMany({
-        where: { id, estado: CommitmentStatus.PAGADO, paymentTransactionId: paymentTransaction.id },
+        where: { id, userId, estado: CommitmentStatus.PAGADO, paymentTransactionId: paymentTransaction.id },
         data: { estado: CommitmentStatus.PENDIENTE, paymentTransactionId: null },
       });
 
@@ -127,6 +138,7 @@ export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
       const deletedTransaction = await tx.transaction.deleteMany({
         where: {
           id: paymentTransaction.id,
+          userId,
           tipo: TransactionType.GASTO,
           monto: paymentTransaction.monto,
           accountId: paymentTransaction.accountId,
@@ -138,12 +150,16 @@ export async function markCommitmentUnpaid(id: string): Promise<Commitment> {
         throw new CommitmentPaymentConflictError("Linked payment transaction changed while reverting payment.");
       }
 
-      await tx.account.update({
-        where: { id: paymentTransaction.accountId },
+      const accountUpdate = await tx.account.updateMany({
+        where: { id: paymentTransaction.accountId, userId, activa: true },
         data: { saldo: { increment: paymentTransaction.monto } },
       });
 
-      return tx.commitment.findUniqueOrThrow({ where: { id } });
+      if (accountUpdate.count !== 1) {
+        throw new CommitmentPaymentConflictError("Payment account changed while reverting payment.");
+      }
+
+      return (tx.commitment.findFirstOrThrow ?? tx.commitment.findUniqueOrThrow)({ where: { id, userId } });
     }, { isolationLevel: "Serializable" });
   } catch (error) {
     if (isPrismaTransactionConflictError(error)) {
@@ -165,10 +181,10 @@ function parseMarkCommitmentPaidInput(payload: unknown): MarkCommitmentPaidInput
   };
 }
 
-async function validatePaymentReferences(tx: Prisma.TransactionClient, input: MarkCommitmentPaidInput) {
+async function validatePaymentReferences(tx: any, input: MarkCommitmentPaidInput, userId: string) {
   const [account, category] = await Promise.all([
-    tx.account.findFirst({ where: { id: input.accountId, activa: true } }),
-    tx.category.findUnique({ where: { id: input.categoryId } }),
+    tx.account.findFirst({ where: { id: input.accountId, activa: true, userId } }),
+    (tx.category.findFirst ?? tx.category.findUnique)({ where: { id: input.categoryId, userId } }),
   ]);
 
   if (!account) {

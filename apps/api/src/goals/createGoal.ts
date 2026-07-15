@@ -4,20 +4,23 @@ import type { GoalMutationDTO } from "@finanzas-personales/shared-types";
 import { prisma } from "../prisma.js";
 import { goalListSelect, type GoalListItem, toGoalListItem } from "./getGoals.js";
 
+const goalPrisma = prisma as any;
+
 const ALLOWED_GOAL_ACCOUNT_TYPES = [AccountType.AHORRO, AccountType.RESERVA] as const;
 
 export class GoalValidationError extends Error {}
 
-export async function createGoal(data: GoalMutationDTO): Promise<GoalListItem> {
-  await validateGoalAccount(data.accountId);
+export async function createGoal(data: GoalMutationDTO, userId: string): Promise<GoalListItem> {
+  await validateGoalAccount(data.accountId, userId);
 
-  const goal = await prisma.goal.create({
+  const goal = await goalPrisma.goal.create({
     data: {
       nombre: data.name,
       montoObjetivo: data.targetAmount,
       estado: GoalStatus.ACTIVA,
       notas: data.notes?.trim() || null,
       accountId: data.accountId,
+      userId,
     },
     select: goalListSelect,
   });
@@ -25,9 +28,9 @@ export async function createGoal(data: GoalMutationDTO): Promise<GoalListItem> {
   return toGoalListItem(goal);
 }
 
-export async function validateGoalAccount(accountId: string) {
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
+export async function validateGoalAccount(accountId: string, userId: string) {
+  const account = await (goalPrisma.account.findFirst ?? goalPrisma.account.findUnique)({
+    where: { id: accountId, userId },
     select: { activa: true, tipo: true },
   });
 

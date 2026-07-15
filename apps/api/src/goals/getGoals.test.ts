@@ -24,7 +24,7 @@ describe("getGoals", () => {
       goal({ id: "goal-complete", nombre: "Notebook", estado: GoalStatus.COMPLETADA, montoObjetivo: 700_000, account: account({ saldo: 750_000 }) }),
     ]);
 
-    const result = await getGoals();
+    const result = await getGoals("user-demo");
 
     expect(result.groups).toEqual([
       {
@@ -69,7 +69,7 @@ describe("getGoals", () => {
       goal({ id: "goal-complete-b", nombre: "Viaje", estado: GoalStatus.COMPLETADA }),
     ]);
 
-    const result = await getGoals();
+    const result = await getGoals("user-demo");
 
     expect(result.groups.map((group) => group.status)).toEqual(["ACTIVA", "PAUSADA", "COMPLETADA"]);
     expect(result.groups.map((group) => group.goals.map((goal) => goal.id))).toEqual([
@@ -82,7 +82,7 @@ describe("getGoals", () => {
   it("returns all status groups when there are no goals", async () => {
     findManyGoals.mockResolvedValueOnce([]);
 
-    const result = await getGoals();
+    const result = await getGoals("user-demo");
 
     expect(result.groups).toEqual([
       { status: "ACTIVA", label: "Activas", goals: [] },

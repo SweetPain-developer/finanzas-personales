@@ -2,6 +2,8 @@ import { CommitmentType, type CommitmentTemplate } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+const commitmentTemplatePrisma = prisma as any;
+
 export type CommitmentTemplateListItem = Pick<
   CommitmentTemplate,
   "id" | "nombre" | "tipo" | "montoDefault" | "diaVencimiento" | "activa" | "notas"
@@ -46,8 +48,9 @@ export class CommitmentTemplateDeleteConflictError extends Error {
   }
 }
 
-export async function getCommitmentTemplates(): Promise<CommitmentTemplateListItem[]> {
-  return prisma.commitmentTemplate.findMany({
+export async function getCommitmentTemplates(userId: string): Promise<CommitmentTemplateListItem[]> {
+  return commitmentTemplatePrisma.commitmentTemplate.findMany({
+    where: { userId },
     select: {
       id: true,
       nombre: true,
@@ -61,10 +64,10 @@ export async function getCommitmentTemplates(): Promise<CommitmentTemplateListIt
   });
 }
 
-export async function createCommitmentTemplate(payload: unknown): Promise<CommitmentTemplateListItem> {
+export async function createCommitmentTemplate(payload: unknown, userId: string): Promise<CommitmentTemplateListItem> {
   const input = parseCommitmentTemplateInput(payload, { requireActiva: false });
 
-  return prisma.commitmentTemplate.create({
+  return commitmentTemplatePrisma.commitmentTemplate.create({
     data: {
       nombre: input.nombre,
       tipo: input.tipo,
@@ -72,6 +75,7 @@ export async function createCommitmentTemplate(payload: unknown): Promise<Commit
       diaVencimiento: input.diaVencimiento,
       notas: input.notas,
       activa: input.activa ?? true,
+      userId,
     },
     select: commitmentTemplateListSelect,
   });
@@ -80,6 +84,7 @@ export async function createCommitmentTemplate(payload: unknown): Promise<Commit
 export async function updateCommitmentTemplateActive(
   id: string,
   payload: CommitmentTemplatePayload,
+  userId: string,
 ): Promise<CommitmentTemplateListItem> {
   if (!id.trim()) {
     throw new CommitmentTemplateNotFoundError("Commitment template not found.");
@@ -93,8 +98,8 @@ export async function updateCommitmentTemplateActive(
     throw new CommitmentTemplateValidationError("activa must be a boolean.");
   }
 
-  const existingTemplate = await prisma.commitmentTemplate.findUnique({
-    where: { id },
+  const existingTemplate = await (commitmentTemplatePrisma.commitmentTemplate.findFirst ?? commitmentTemplatePrisma.commitmentTemplate.findUnique)({
+    where: { id, userId },
     select: { id: true },
   });
 
@@ -102,9 +107,17 @@ export async function updateCommitmentTemplateActive(
     throw new CommitmentTemplateNotFoundError("Commitment template not found.");
   }
 
-  return prisma.commitmentTemplate.update({
-    where: { id },
+  const updatedCount = await commitmentTemplatePrisma.commitmentTemplate.updateMany({
+    where: { id, userId },
     data: { activa: payload.activa },
+  });
+
+  if (updatedCount.count === 0) {
+    throw new CommitmentTemplateNotFoundError("Commitment template not found.");
+  }
+
+  return (commitmentTemplatePrisma.commitmentTemplate.findFirstOrThrow ?? commitmentTemplatePrisma.commitmentTemplate.findUniqueOrThrow)({
+    where: { id, userId },
     select: commitmentTemplateListSelect,
   });
 }
@@ -112,6 +125,7 @@ export async function updateCommitmentTemplateActive(
 export async function updateCommitmentTemplate(
   id: string,
   payload: unknown,
+  userId: string,
 ): Promise<CommitmentTemplateListItem> {
   if (!id.trim()) {
     throw new CommitmentTemplateNotFoundError("Commitment template not found.");
@@ -119,8 +133,8 @@ export async function updateCommitmentTemplate(
 
   const input = parseCommitmentTemplateInput(payload, { requireActiva: false });
 
-  const existingTemplate = await prisma.commitmentTemplate.findUnique({
-    where: { id },
+  const existingTemplate = await (commitmentTemplatePrisma.commitmentTemplate.findFirst ?? commitmentTemplatePrisma.commitmentTemplate.findUnique)({
+    where: { id, userId },
     select: { id: true },
   });
 
@@ -128,8 +142,8 @@ export async function updateCommitmentTemplate(
     throw new CommitmentTemplateNotFoundError("Commitment template not found.");
   }
 
-  return prisma.commitmentTemplate.update({
-    where: { id },
+  const updatedCount = await commitmentTemplatePrisma.commitmentTemplate.updateMany({
+    where: { id, userId },
     data: {
       nombre: input.nombre,
       tipo: input.tipo,
@@ -138,18 +152,27 @@ export async function updateCommitmentTemplate(
       notas: input.notas,
       ...(input.activa === undefined ? {} : { activa: input.activa }),
     },
+  });
+
+  if (updatedCount.count === 0) {
+    throw new CommitmentTemplateNotFoundError("Commitment template not found.");
+  }
+
+  return (commitmentTemplatePrisma.commitmentTemplate.findFirstOrThrow ?? commitmentTemplatePrisma.commitmentTemplate.findUniqueOrThrow)({
+    where: { id, userId },
     select: commitmentTemplateListSelect,
   });
 }
 
-export async function deleteCommitmentTemplate(id: string): Promise<void> {
+export async function deleteCommitmentTemplate(id: string, userId: string): Promise<void> {
   if (!id.trim()) {
     throw new CommitmentTemplateNotFoundError("Commitment template not found.");
   }
 
-  const deletedCount = await prisma.$executeRaw`
+  const deletedCount = await commitmentTemplatePrisma.$executeRaw`
     DELETE FROM "commitment_templates" AS ct
     WHERE ct."id" = ${id}
+      AND ct."userId" = ${userId}
       AND NOT EXISTS (
         SELECT 1
         FROM "commitments" AS c
@@ -161,8 +184,8 @@ export async function deleteCommitmentTemplate(id: string): Promise<void> {
     return;
   }
 
-  const existingTemplate = await prisma.commitmentTemplate.findUnique({
-    where: { id },
+  const existingTemplate = await (commitmentTemplatePrisma.commitmentTemplate.findFirst ?? commitmentTemplatePrisma.commitmentTemplate.findUnique)({
+    where: { id, userId },
     select: { id: true },
   });
 

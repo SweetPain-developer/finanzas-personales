@@ -2,6 +2,8 @@ import { CommitmentStatus, TransactionType, type Commitment, type CommitmentTemp
 
 import { prisma } from "../prisma.js";
 
+const commitmentPrisma = prisma as any;
+
 export type CommitmentListItem = Pick<Commitment, "id" | "templateId" | "nombre" | "tipo" | "monto" | "estado" | "notas"> & {
   fechaVencimiento: string | null;
   dueDay: number | null;
@@ -63,13 +65,13 @@ export class CommitmentValidationError extends Error {
   }
 }
 
-export async function getCommitments(month = DEFAULT_MONTH): Promise<CommitmentsData> {
+export async function getCommitments(userId: string, month = DEFAULT_MONTH): Promise<CommitmentsData> {
   const monthRange = parseCommitmentMonth(month);
 
-  await generateCommitmentsFromActiveTemplates(monthRange);
+  await generateCommitmentsFromActiveTemplates(monthRange, userId);
 
-  const commitments = await prisma.commitment.findMany({
-    where: { anio: monthRange.year, mes: monthRange.month },
+  const commitments = await commitmentPrisma.commitment.findMany({
+    where: { anio: monthRange.year, mes: monthRange.month, userId },
     select: {
       id: true,
       templateId: true,
@@ -90,7 +92,7 @@ export async function getCommitments(month = DEFAULT_MONTH): Promise<Commitments
       },
     },
     orderBy: [{ fechaVencimiento: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-  });
+  }) as CommitmentRecord[];
 
   const pendingCommitments = commitments
     .filter((commitment) => commitment.estado === CommitmentStatus.PENDIENTE)
@@ -119,10 +121,10 @@ export async function getCommitments(month = DEFAULT_MONTH): Promise<Commitments
   };
 }
 
-async function generateCommitmentsFromActiveTemplates(monthRange: MonthRange) {
+async function generateCommitmentsFromActiveTemplates(monthRange: MonthRange, userId: string) {
   const [activeTemplates, existingTemplateCommitments] = await Promise.all([
-    prisma.commitmentTemplate.findMany({
-      where: { activa: true },
+    commitmentPrisma.commitmentTemplate.findMany({
+      where: { activa: true, userId },
       select: {
         id: true,
         nombre: true,
@@ -132,15 +134,16 @@ async function generateCommitmentsFromActiveTemplates(monthRange: MonthRange) {
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
-    prisma.commitment.findMany({
+    commitmentPrisma.commitment.findMany({
       where: {
         anio: monthRange.year,
         mes: monthRange.month,
+        userId,
         templateId: { not: null },
       },
       select: { templateId: true },
     }),
-  ]);
+  ]) as [Array<Pick<CommitmentTemplate, "id" | "nombre" | "tipo" | "montoDefault" | "diaVencimiento">>, Array<Pick<Commitment, "templateId">>];
 
   const existingTemplateIds = new Set(existingTemplateCommitments.map((commitment) => commitment.templateId).filter(Boolean));
   const missingTemplates = activeTemplates.filter((template) => !existingTemplateIds.has(template.id));
@@ -149,7 +152,7 @@ async function generateCommitmentsFromActiveTemplates(monthRange: MonthRange) {
     return;
   }
 
-  await prisma.commitment.createMany({
+  await commitmentPrisma.commitment.createMany({
     data: missingTemplates.map((template) => ({
       nombre: template.nombre,
       tipo: template.tipo,
@@ -160,6 +163,7 @@ async function generateCommitmentsFromActiveTemplates(monthRange: MonthRange) {
       anio: monthRange.year,
       notas: null,
       templateId: template.id,
+      userId,
     })),
     skipDuplicates: true,
   });

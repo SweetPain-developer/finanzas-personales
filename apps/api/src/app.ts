@@ -81,7 +81,7 @@ app.get("/auth/session", async (request, response, next) => {
 
 // API contract: GET /dashboard accepts zero or one `month=YYYY-MM` query value.
 // Missing month defaults to the seeded dashboard month; invalid or repeated values return 400.
-app.get("/dashboard", async (request, response, next) => {
+app.get("/dashboard", requireAuth, async (request, response, next) => {
   try {
     if (Array.isArray(request.query.month)) {
       response.status(400).json({ error: "Repeated month query values are not allowed." });
@@ -89,7 +89,7 @@ app.get("/dashboard", async (request, response, next) => {
     }
 
     const month = typeof request.query.month === "string" ? request.query.month : undefined;
-    const dashboardData = await getDashboardData(month);
+    const dashboardData = await getDashboardData(request.currentUser!.id, month);
 
     response.json(dashboardData);
   } catch (error) {
@@ -163,18 +163,18 @@ app.delete("/accounts/:id", requireAuth, async (request, response, next) => {
 
 
 
-app.get("/goals", async (_request, response, next) => {
+app.get("/goals", requireAuth, async (request, response, next) => {
   try {
-    response.json(await getGoals());
+    response.json(await getGoals(request.currentUser!.id));
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/goals", async (request, response, next) => {
+app.post("/goals", requireAuth, async (request, response, next) => {
   try {
     const goalDTO = GoalMutationDTO.parse(request.body);
-    const goal = await createGoal(goalDTO);
+    const goal = await createGoal(goalDTO, request.currentUser!.id);
 
     response.status(201).json({ goal });
   } catch (error) {
@@ -182,10 +182,10 @@ app.post("/goals", async (request, response, next) => {
   }
 });
 
-app.patch("/goals/:id", async (request, response, next) => {
+app.patch("/goals/:id", requireAuth, async (request, response, next) => {
   try {
     const goalDTO = GoalMutationDTO.parse(request.body);
-    const goal = await updateGoal(request.params.id, goalDTO);
+    const goal = await updateGoal(request.params.id, goalDTO, request.currentUser!.id);
 
     response.json({ goal });
   } catch (error) {
@@ -193,10 +193,10 @@ app.patch("/goals/:id", async (request, response, next) => {
   }
 });
 
-app.patch("/goals/:id/status", async (request, response, next) => {
+app.patch("/goals/:id/status", requireAuth, async (request, response, next) => {
   try {
     const statusDTO = GoalStatusUpdateDTO.parse(request.body);
-    const goal = await updateGoalStatus(request.params.id, statusDTO);
+    const goal = await updateGoalStatus(request.params.id, statusDTO, request.currentUser!.id);
 
     response.json({ goal });
   } catch (error) {
@@ -204,9 +204,9 @@ app.patch("/goals/:id/status", async (request, response, next) => {
   }
 });
 
-app.delete("/goals/:id", async (request, response, next) => {
+app.delete("/goals/:id", requireAuth, async (request, response, next) => {
   try {
-    await deleteGoal(request.params.id);
+    await deleteGoal(request.params.id, request.currentUser!.id);
 
     response.status(204).send();
   } catch (error) {
@@ -214,7 +214,7 @@ app.delete("/goals/:id", async (request, response, next) => {
   }
 });
 
-app.get("/commitments", async (request, response, next) => {
+app.get("/commitments", requireAuth, async (request, response, next) => {
   try {
     const queryError = validateSingleValueQuery(request.query, ["month"]);
 
@@ -223,23 +223,23 @@ app.get("/commitments", async (request, response, next) => {
       return;
     }
 
-    response.json(await getCommitments(getMonthQueryValue(request.query.month)));
+    response.json(await getCommitments(request.currentUser!.id, getMonthQueryValue(request.query.month)));
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/commitment-templates", async (_request, response, next) => {
+app.get("/commitment-templates", requireAuth, async (request, response, next) => {
   try {
-    response.json({ templates: await getCommitmentTemplates() });
+    response.json({ templates: await getCommitmentTemplates(request.currentUser!.id) });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/commitment-templates", async (request, response, next) => {
+app.post("/commitment-templates", requireAuth, async (request, response, next) => {
   try {
-    const template = await createCommitmentTemplate(request.body);
+    const template = await createCommitmentTemplate(request.body, request.currentUser!.id);
 
     response.status(201).json({ template });
   } catch (error) {
@@ -247,14 +247,14 @@ app.post("/commitment-templates", async (request, response, next) => {
   }
 });
 
-app.patch("/commitment-templates/:id", async (request, response, next) => {
+app.patch("/commitment-templates/:id", requireAuth, async (request, response, next) => {
   try {
     const bodyKeys = typeof request.body === "object" && request.body !== null && !Array.isArray(request.body)
       ? Object.keys(request.body)
       : [];
     const template = bodyKeys.length === 1 && bodyKeys[0] === "activa"
-      ? await updateCommitmentTemplateActive(request.params.id, request.body)
-      : await updateCommitmentTemplate(request.params.id, request.body);
+      ? await updateCommitmentTemplateActive(request.params.id, request.body, request.currentUser!.id)
+      : await updateCommitmentTemplate(request.params.id, request.body, request.currentUser!.id);
 
     response.json({ template });
   } catch (error) {
@@ -262,9 +262,9 @@ app.patch("/commitment-templates/:id", async (request, response, next) => {
   }
 });
 
-app.delete("/commitment-templates/:id", async (request, response, next) => {
+app.delete("/commitment-templates/:id", requireAuth, async (request, response, next) => {
   try {
-    await deleteCommitmentTemplate(request.params.id);
+    await deleteCommitmentTemplate(request.params.id, request.currentUser!.id);
 
     response.status(204).send();
   } catch (error) {
@@ -272,9 +272,9 @@ app.delete("/commitment-templates/:id", async (request, response, next) => {
   }
 });
 
-app.post("/commitments", async (request, response, next) => {
+app.post("/commitments", requireAuth, async (request, response, next) => {
   try {
-    const commitment = await createCommitment(request.body);
+    const commitment = await createCommitment(request.body, request.currentUser!.id);
 
     response.status(201).json({ commitment });
   } catch (error) {
@@ -282,9 +282,9 @@ app.post("/commitments", async (request, response, next) => {
   }
 });
 
-app.patch("/commitments/:id", async (request, response, next) => {
+app.patch("/commitments/:id", requireAuth, async (request, response, next) => {
   try {
-    const commitment = await updateCommitment(request.params.id, request.body);
+    const commitment = await updateCommitment(request.params.id, request.body, request.currentUser!.id);
 
     response.json({ commitment });
   } catch (error) {
@@ -292,9 +292,9 @@ app.patch("/commitments/:id", async (request, response, next) => {
   }
 });
 
-app.delete("/commitments/:id", async (request, response, next) => {
+app.delete("/commitments/:id", requireAuth, async (request, response, next) => {
   try {
-    await deleteCommitment(request.params.id);
+    await deleteCommitment(request.params.id, request.currentUser!.id);
 
     response.status(204).send();
   } catch (error) {
@@ -302,9 +302,9 @@ app.delete("/commitments/:id", async (request, response, next) => {
   }
 });
 
-app.patch("/commitments/:id/pay", async (request, response, next) => {
+app.patch("/commitments/:id/pay", requireAuth, async (request, response, next) => {
   try {
-    const commitment = await markCommitmentPaid(request.params.id, request.body);
+    const commitment = await markCommitmentPaid(request.params.id, request.body, request.currentUser!.id);
 
     response.json({ commitment });
   } catch (error) {
@@ -312,9 +312,9 @@ app.patch("/commitments/:id/pay", async (request, response, next) => {
   }
 });
 
-app.patch("/commitments/:id/unpay", async (request, response, next) => {
+app.patch("/commitments/:id/unpay", requireAuth, async (request, response, next) => {
   try {
-    const commitment = await markCommitmentUnpaid(request.params.id);
+    const commitment = await markCommitmentUnpaid(request.params.id, request.currentUser!.id);
 
     response.json({ commitment });
   } catch (error) {

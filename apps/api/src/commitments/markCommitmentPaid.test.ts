@@ -23,6 +23,7 @@ vi.mock("../prisma.js", () => ({
     account: {
       findFirst: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     $transaction: vi.fn(async (callback) => callback(prisma)),
   },
@@ -38,6 +39,7 @@ const deleteManyTransaction = prisma.transaction.deleteMany as Mock;
 const findUniqueTransaction = prisma.transaction.findUnique as Mock;
 const findFirstAccount = prisma.account.findFirst as Mock;
 const updateAccount = prisma.account.update as Mock;
+const updateManyAccount = prisma.account.updateMany as Mock;
 const runPrismaTransaction = prisma.$transaction as Mock;
 
 describe("markCommitmentPaid", () => {
@@ -52,26 +54,28 @@ describe("markCommitmentPaid", () => {
     findUniqueTransaction.mockReset();
     findFirstAccount.mockReset();
     updateAccount.mockReset();
+    updateManyAccount.mockReset();
     runPrismaTransaction.mockReset();
     runPrismaTransaction.mockImplementation(async (callback) => callback(prisma));
   });
 
   it("creates one expense transaction, decreases the account balance, and marks a pending commitment as paid", async () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", nombre: "Arriendo", monto: 350_000, estado: CommitmentStatus.PENDIENTE }));
-    updateManyCommitment.mockResolvedValueOnce({ count: 1 });
+    updateManyCommitment.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
     findFirstAccount.mockResolvedValueOnce({ id: "account-demo-primary", activa: true });
     findUniqueCategory.mockResolvedValueOnce({ id: "category-services", tipo: CategoryType.GASTO });
     createTransaction.mockResolvedValueOnce({ id: "transaction-payment" });
     findUniqueOrThrowCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", estado: CommitmentStatus.PAGADO }));
+    updateManyAccount.mockResolvedValueOnce({ count: 1 });
 
-    const result = await markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "category-services" });
+    const result = await markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "category-services" }, "user-demo");
 
     expect(result.estado).toBe(CommitmentStatus.PAGADO);
     expect(runPrismaTransaction).toHaveBeenCalledTimes(1);
-    expect(findFirstAccount).toHaveBeenCalledWith({ where: { id: "account-demo-primary", activa: true } });
-    expect(findUniqueCategory).toHaveBeenCalledWith({ where: { id: "category-services" } });
-    expect(updateAccount).toHaveBeenCalledWith({
-      where: { id: "account-demo-primary" },
+    expect(findFirstAccount).toHaveBeenCalledWith({ where: { id: "account-demo-primary", activa: true, userId: "user-demo" } });
+    expect(findUniqueCategory).toHaveBeenCalledWith({ where: { id: "category-services", userId: "user-demo" } });
+    expect(updateManyAccount).toHaveBeenCalledWith({
+      where: { id: "account-demo-primary", userId: "user-demo", activa: true },
       data: { saldo: { decrement: 350_000 } },
     });
     expect(createTransaction).toHaveBeenCalledWith({
@@ -82,24 +86,22 @@ describe("markCommitmentPaid", () => {
         accountId: "account-demo-primary",
         categoryId: "category-services",
         transferId: null,
+        userId: "user-demo",
       },
     });
     expect(updateManyCommitment).toHaveBeenCalledWith({
-      where: { id: "commitment-rent", estado: CommitmentStatus.PENDIENTE },
+      where: { id: "commitment-rent", userId: "user-demo", estado: CommitmentStatus.PENDIENTE },
       data: { estado: CommitmentStatus.PAGADO },
     });
-    expect(updateCommitment).toHaveBeenCalledWith({
-      where: { id: "commitment-rent" },
-      data: { paymentTransactionId: "transaction-payment" },
-    });
-    expect(findUniqueOrThrowCommitment).toHaveBeenCalledWith({ where: { id: "commitment-rent" } });
+    expect(updateCommitment).not.toHaveBeenCalled();
+    expect(findUniqueOrThrowCommitment).toHaveBeenCalledWith({ where: { id: "commitment-rent", userId: "user-demo" } });
   });
 
   it("returns an already paid commitment without updating it again", async () => {
     const paidCommitment = commitment({ id: "commitment-phone", estado: CommitmentStatus.PAGADO });
     findUniqueCommitment.mockResolvedValueOnce(paidCommitment);
 
-    const result = await markCommitmentPaid("commitment-phone", { accountId: "account-demo-primary", categoryId: "category-services" });
+    const result = await markCommitmentPaid("commitment-phone", { accountId: "account-demo-primary", categoryId: "category-services" }, "user-demo");
 
     expect(result).toEqual(paidCommitment);
     expect(runPrismaTransaction).not.toHaveBeenCalled();
@@ -113,7 +115,7 @@ describe("markCommitmentPaid", () => {
   it("rejects nonexistent commitments without creating transactions", async () => {
     findUniqueCommitment.mockResolvedValueOnce(null);
 
-    await expect(markCommitmentPaid("missing-commitment", { accountId: "account-demo-primary", categoryId: "category-services" })).rejects.toThrow(new CommitmentNotFoundError("Commitment not found."));
+    await expect(markCommitmentPaid("missing-commitment", { accountId: "account-demo-primary", categoryId: "category-services" }, "user-demo")).rejects.toThrow(new CommitmentNotFoundError("Commitment not found."));
 
     expect(runPrismaTransaction).not.toHaveBeenCalled();
     expect(updateCommitment).not.toHaveBeenCalled();
@@ -123,9 +125,9 @@ describe("markCommitmentPaid", () => {
 
   it("rejects missing account and category for a pending commitment", async () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", estado: CommitmentStatus.PENDIENTE }));
-    updateManyCommitment.mockResolvedValueOnce({ count: 1 });
+    updateManyCommitment.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
 
-    await expect(markCommitmentPaid("commitment-rent", {})).rejects.toThrow(new CommitmentPaymentValidationError("accountId is required."));
+    await expect(markCommitmentPaid("commitment-rent", {}, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("accountId is required."));
 
     expect(runPrismaTransaction).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -141,7 +143,7 @@ describe("markCommitmentPaid", () => {
   ])("rejects malformed payment payloads before opening a transaction", async ({ payload, message }) => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", estado: CommitmentStatus.PENDIENTE }));
 
-    await expect(markCommitmentPaid("commitment-rent", payload)).rejects.toThrow(new CommitmentPaymentValidationError(message));
+    await expect(markCommitmentPaid("commitment-rent", payload, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError(message));
 
     expect(runPrismaTransaction).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -155,7 +157,7 @@ describe("markCommitmentPaid", () => {
     findFirstAccount.mockResolvedValueOnce(null);
     findUniqueCategory.mockResolvedValueOnce({ id: "category-services", tipo: CategoryType.GASTO });
 
-    await expect(markCommitmentPaid("commitment-rent", { accountId: "missing-account", categoryId: "category-services" })).rejects.toThrow(new CommitmentPaymentValidationError("Account not found or inactive."));
+    await expect(markCommitmentPaid("commitment-rent", { accountId: "missing-account", categoryId: "category-services" }, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Account not found or inactive."));
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -165,7 +167,7 @@ describe("markCommitmentPaid", () => {
   it("rolls back the paid state when account validation fails", async () => {
     const state = mockTransactionalPaymentState({ account: null, category: { id: "category-services", tipo: CategoryType.GASTO } });
 
-    await expect(markCommitmentPaid("commitment-rent", { accountId: "missing-account", categoryId: "category-services" })).rejects.toThrow(new CommitmentPaymentValidationError("Account not found or inactive."));
+    await expect(markCommitmentPaid("commitment-rent", { accountId: "missing-account", categoryId: "category-services" }, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Account not found or inactive."));
 
     expect(state.commitment.estado).toBe(CommitmentStatus.PENDIENTE);
     expect(state.accountSaldo).toBe(500_000);
@@ -178,7 +180,7 @@ describe("markCommitmentPaid", () => {
     findFirstAccount.mockResolvedValueOnce({ id: "account-demo-primary", activa: true });
     findUniqueCategory.mockResolvedValueOnce(null);
 
-    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "missing-category" })).rejects.toThrow(new CommitmentPaymentValidationError("Category not found."));
+    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "missing-category" }, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Category not found."));
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -188,7 +190,7 @@ describe("markCommitmentPaid", () => {
   it("rolls back the paid state when category validation fails", async () => {
     const state = mockTransactionalPaymentState({ account: { id: "account-demo-primary", activa: true }, category: null });
 
-    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "missing-category" })).rejects.toThrow(new CommitmentPaymentValidationError("Category not found."));
+    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "missing-category" }, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Category not found."));
 
     expect(state.commitment.estado).toBe(CommitmentStatus.PENDIENTE);
     expect(state.accountSaldo).toBe(500_000);
@@ -201,7 +203,7 @@ describe("markCommitmentPaid", () => {
     findFirstAccount.mockResolvedValueOnce({ id: "account-demo-primary", activa: true });
     findUniqueCategory.mockResolvedValueOnce({ id: "category-salary", tipo: CategoryType.INGRESO });
 
-    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "category-salary" })).rejects.toThrow(new CommitmentPaymentValidationError("Category type must be GASTO."));
+    await expect(markCommitmentPaid("commitment-rent", { accountId: "account-demo-primary", categoryId: "category-salary" }, "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Category type must be GASTO."));
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -223,12 +225,13 @@ describe("markCommitmentPaid", () => {
     deleteManyTransaction.mockResolvedValueOnce({ count: 1 });
     findUniqueOrThrowCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", estado: CommitmentStatus.PENDIENTE, paymentTransactionId: null }));
 
-    const result = await markCommitmentUnpaid("commitment-rent");
+    updateManyAccount.mockResolvedValueOnce({ count: 1 });
+    const result = await markCommitmentUnpaid("commitment-rent", "user-demo");
 
     expect(result.estado).toBe(CommitmentStatus.PENDIENTE);
     expect(runPrismaTransaction).toHaveBeenCalledTimes(1);
     expect(updateManyCommitment).toHaveBeenCalledWith({
-      where: { id: "commitment-rent", estado: CommitmentStatus.PAGADO, paymentTransactionId: "transaction-payment" },
+      where: { id: "commitment-rent", userId: "user-demo", estado: CommitmentStatus.PAGADO, paymentTransactionId: "transaction-payment" },
       data: { estado: CommitmentStatus.PENDIENTE, paymentTransactionId: null },
     });
     expect(deleteManyTransaction).toHaveBeenCalledWith({
@@ -237,11 +240,12 @@ describe("markCommitmentPaid", () => {
         tipo: TransactionType.GASTO,
         monto: 350_000,
         accountId: "account-demo-primary",
+        userId: "user-demo",
         transferId: null,
       },
     });
-    expect(updateAccount).toHaveBeenCalledWith({
-      where: { id: "account-demo-primary" },
+    expect(updateManyAccount).toHaveBeenCalledWith({
+      where: { id: "account-demo-primary", userId: "user-demo", activa: true },
       data: { saldo: { increment: 350_000 } },
     });
   });
@@ -249,7 +253,7 @@ describe("markCommitmentPaid", () => {
   it("rejects reverting an unpaid commitment before opening a transaction", async () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-rent", estado: CommitmentStatus.PENDIENTE }));
 
-    await expect(markCommitmentUnpaid("commitment-rent")).rejects.toThrow(new CommitmentPaymentValidationError("Only paid commitments can be reverted."));
+    await expect(markCommitmentUnpaid("commitment-rent", "user-demo")).rejects.toThrow(new CommitmentPaymentValidationError("Only paid commitments can be reverted."));
 
     expect(runPrismaTransaction).not.toHaveBeenCalled();
     expect(deleteManyTransaction).not.toHaveBeenCalled();
@@ -260,7 +264,7 @@ describe("markCommitmentPaid", () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-phone", estado: CommitmentStatus.PAGADO, paymentTransactionId: null }));
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-phone", estado: CommitmentStatus.PAGADO, paymentTransactionId: null }));
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Paid commitment has no linked payment transaction."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Paid commitment has no linked payment transaction."));
 
     expect(deleteManyTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -271,7 +275,7 @@ describe("markCommitmentPaid", () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-phone", estado: CommitmentStatus.PAGADO, paymentTransactionId: "missing-transaction" }));
     findUniqueTransaction.mockResolvedValueOnce(null);
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction not found."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction not found."));
 
     expect(deleteManyTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -291,7 +295,7 @@ describe("markCommitmentPaid", () => {
       ...transaction,
     });
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction is not reversible."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction is not reversible."));
 
     expect(updateManyCommitment).not.toHaveBeenCalled();
     expect(deleteManyTransaction).not.toHaveBeenCalled();
@@ -304,7 +308,7 @@ describe("markCommitmentPaid", () => {
     findUniqueTransaction.mockResolvedValueOnce({ id: "transaction-payment", tipo: TransactionType.GASTO, monto: 350_000, accountId: "account-demo-primary", transferId: null });
     updateManyCommitment.mockResolvedValueOnce({ count: 0 });
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Commitment changed while reverting payment."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Commitment changed while reverting payment."));
 
     expect(deleteManyTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
@@ -317,7 +321,7 @@ describe("markCommitmentPaid", () => {
     updateManyCommitment.mockResolvedValueOnce({ count: 1 });
     deleteManyTransaction.mockResolvedValueOnce({ count: 0 });
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction changed while reverting payment."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Linked payment transaction changed while reverting payment."));
 
     expect(updateAccount).not.toHaveBeenCalled();
   });
@@ -326,7 +330,7 @@ describe("markCommitmentPaid", () => {
     findUniqueCommitment.mockResolvedValueOnce(commitment({ id: "commitment-phone", estado: CommitmentStatus.PAGADO, paymentTransactionId: "transaction-payment" }));
     runPrismaTransaction.mockRejectedValueOnce({ code: "P2034" });
 
-    await expect(markCommitmentUnpaid("commitment-phone")).rejects.toThrow(new CommitmentPaymentConflictError("Commitment changed while reverting payment. Please reload and try again."));
+    await expect(markCommitmentUnpaid("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentPaymentConflictError("Commitment changed while reverting payment. Please reload and try again."));
   });
 });
 
@@ -341,6 +345,7 @@ function commitment(overrides: Partial<Commitment> & { id: string; estado: Commi
     mes: 7,
     anio: 2026,
     notas: null,
+    userId: "user-demo",
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     templateId: null,

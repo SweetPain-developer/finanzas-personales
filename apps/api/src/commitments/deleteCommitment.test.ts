@@ -56,14 +56,14 @@ describe("deleteCommitment", () => {
     findCommitment.mockResolvedValueOnce({ estado: CommitmentStatus.PENDIENTE });
     deleteCommitmentRecord.mockResolvedValueOnce({ count: 1 });
 
-    await deleteCommitment("commitment-light");
+    await deleteCommitment("commitment-light", "user-demo");
 
     expect(findCommitment).toHaveBeenCalledWith({
-      where: { id: "commitment-light" },
+      where: { id: "commitment-light", userId: "user-demo" },
       select: { estado: true },
     });
     expect(deleteCommitmentRecord).toHaveBeenCalledWith({
-      where: { id: "commitment-light", estado: CommitmentStatus.PENDIENTE },
+      where: { id: "commitment-light", userId: "user-demo", estado: CommitmentStatus.PENDIENTE },
     });
     expect(createTransaction).not.toHaveBeenCalled();
     expect(deleteTransaction).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("deleteCommitment", () => {
   it("returns a domain not found error for nonexistent commitments", async () => {
     findCommitment.mockResolvedValueOnce(null);
 
-    await expect(deleteCommitment("missing")).rejects.toThrow(new CommitmentDeleteNotFoundError("Commitment not found."));
+    await expect(deleteCommitment("missing", "user-demo")).rejects.toThrow(new CommitmentDeleteNotFoundError("Commitment not found."));
 
     expect(deleteCommitmentRecord).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -89,7 +89,7 @@ describe("deleteCommitment", () => {
   it("rejects paid commitment deletion without transaction, account, or template side effects", async () => {
     findCommitment.mockResolvedValueOnce({ estado: CommitmentStatus.PAGADO });
 
-    await expect(deleteCommitment("commitment-phone")).rejects.toThrow(new CommitmentDeleteConflictError("Paid commitments cannot be deleted."));
+    await expect(deleteCommitment("commitment-phone", "user-demo")).rejects.toThrow(new CommitmentDeleteConflictError("Paid commitments cannot be deleted."));
 
     expect(deleteCommitmentRecord).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -106,10 +106,21 @@ describe("deleteCommitment", () => {
     findCommitment.mockResolvedValueOnce({ estado: CommitmentStatus.PENDIENTE, tipo: CommitmentType.RECURRENTE });
     deleteCommitmentRecord.mockResolvedValueOnce({ count: 0 });
 
-    await expect(deleteCommitment("commitment-race")).rejects.toThrow(new CommitmentDeleteNotFoundError("Commitment not found."));
+    await expect(deleteCommitment("commitment-race", "user-demo")).rejects.toThrow(new CommitmentDeleteNotFoundError("Commitment not found."));
 
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
     expect(createCommitmentTemplate).not.toHaveBeenCalled();
+  });
+
+  it("scopes deletion lookup and mutation to the current user", async () => {
+    findCommitment.mockResolvedValueOnce(null);
+
+    await expect(deleteCommitment("commitment-other-user", "user-demo")).rejects.toThrow(CommitmentDeleteNotFoundError);
+    expect(findCommitment).toHaveBeenCalledWith({
+      where: { id: "commitment-other-user", userId: "user-demo" },
+      select: { estado: true },
+    });
+    expect(deleteCommitmentRecord).not.toHaveBeenCalled();
   });
 });

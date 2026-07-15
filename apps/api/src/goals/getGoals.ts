@@ -2,6 +2,8 @@ import { GoalStatus, type Account, type Goal } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+const goalPrisma = prisma as any;
+
 export type GoalAccount = Pick<Account, "id" | "nombre" | "saldo">;
 
 export type GoalListItem = Pick<Goal, "id" | "nombre" | "montoObjetivo" | "estado" | "notas"> & {
@@ -31,11 +33,12 @@ type GoalWithAccount = Pick<Goal, "id" | "nombre" | "montoObjetivo" | "estado" |
   account: GoalAccount;
 };
 
-export async function getGoals(): Promise<GoalsData> {
-  const goals = await prisma.goal.findMany({
+export async function getGoals(userId: string): Promise<GoalsData> {
+  const goals = await goalPrisma.goal.findMany({
+    where: { userId },
     select: goalListSelect,
     orderBy: [{ nombre: "asc" }, { id: "asc" }],
-  });
+  }) as GoalWithAccount[];
 
   return {
     groups: GOAL_STATUS_ORDER.map((status) => ({

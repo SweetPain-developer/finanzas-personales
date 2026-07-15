@@ -17,7 +17,7 @@ vi.mock("../prisma.js", () => ({
   prisma: {
     $transaction: vi.fn(),
     $executeRaw: vi.fn(),
-    commitmentTemplate: { create: vi.fn(), delete: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+  commitmentTemplate: { create: vi.fn(), delete: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     commitment: { count: vi.fn(), findMany: vi.fn(), createMany: vi.fn(), update: vi.fn(), delete: vi.fn() },
     transaction: { create: vi.fn() },
     account: { update: vi.fn() },
@@ -31,6 +31,8 @@ const createCommitmentTemplateRecord = prisma.commitmentTemplate.create as Mock;
 const deleteCommitmentTemplateRecord = prisma.commitmentTemplate.delete as Mock;
 const findUniqueCommitmentTemplate = prisma.commitmentTemplate.findUnique as Mock;
 const updateCommitmentTemplateRecord = prisma.commitmentTemplate.update as Mock;
+const updateManyCommitmentTemplateRecord = prisma.commitmentTemplate.updateMany as Mock;
+const findUniqueOrThrowCommitmentTemplate = prisma.commitmentTemplate.findUniqueOrThrow as Mock;
 const countCommitments = prisma.commitment.count as Mock;
 const findManyCommitments = prisma.commitment.findMany as Mock;
 const createManyCommitments = prisma.commitment.createMany as Mock;
@@ -49,6 +51,8 @@ describe("commitment templates", () => {
     deleteCommitmentTemplateRecord.mockReset();
     findUniqueCommitmentTemplate.mockReset();
     updateCommitmentTemplateRecord.mockReset();
+    updateManyCommitmentTemplateRecord.mockReset();
+    findUniqueOrThrowCommitmentTemplate.mockReset();
     countCommitments.mockReset();
     findManyCommitments.mockReset();
     createManyCommitments.mockReset();
@@ -64,9 +68,10 @@ describe("commitment templates", () => {
       commitmentTemplate({ id: "template-play", nombre: "Play", montoDefault: 7_000, diaVencimiento: 20, activa: false }),
     ]);
 
-    const result = await getCommitmentTemplates();
+    const result = await getCommitmentTemplates("user-demo");
 
     expect(findManyCommitmentTemplates).toHaveBeenCalledWith({
+      where: { userId: "user-demo" },
       select: { id: true, nombre: true, tipo: true, montoDefault: true, diaVencimiento: true, activa: true, notas: true },
       orderBy: [{ activa: "desc" }, { nombre: "asc" }, { id: "asc" }],
     });
@@ -80,11 +85,11 @@ describe("commitment templates", () => {
     const payload = { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 29_990, diaVencimiento: 12, notas: "Fibra hogar" };
     createCommitmentTemplateRecord.mockResolvedValueOnce(commitmentTemplate({ id: "template-internet", ...payload }));
 
-    const result = await createCommitmentTemplate(payload);
+    const result = await createCommitmentTemplate(payload, "user-demo");
 
     expect(result.nombre).toBe("Internet");
     expect(createCommitmentTemplateRecord).toHaveBeenCalledWith({
-      data: { ...payload, activa: true },
+      data: { ...payload, activa: true, userId: "user-demo" },
       select: { id: true, nombre: true, tipo: true, montoDefault: true, diaVencimiento: true, activa: true, notas: true },
     });
     expect(findManyCommitments).not.toHaveBeenCalled();
@@ -102,7 +107,7 @@ describe("commitment templates", () => {
     { payload: { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 0, diaVencimiento: 10 }, message: "montoDefault must be an integer greater than zero." },
     { payload: { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 10_000, diaVencimiento: 32 }, message: "diaVencimiento must be an integer between 1 and 31 or null." },
   ])("rejects invalid create payloads", async ({ payload, message }) => {
-    await expect(createCommitmentTemplate(payload)).rejects.toThrow(new CommitmentTemplateValidationError(message));
+    await expect(createCommitmentTemplate(payload, "user-demo")).rejects.toThrow(new CommitmentTemplateValidationError(message));
     expect(createCommitmentTemplateRecord).not.toHaveBeenCalled();
   });
 
@@ -110,13 +115,14 @@ describe("commitment templates", () => {
     findUniqueCommitmentTemplate.mockResolvedValueOnce({ id: "template-rent" });
     updateCommitmentTemplateRecord.mockResolvedValueOnce(commitmentTemplate({ id: "template-rent", activa: false }));
 
-    const result = await updateCommitmentTemplateActive("template-rent", { activa: false });
+    updateManyCommitmentTemplateRecord.mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrowCommitmentTemplate.mockResolvedValueOnce(commitmentTemplate({ id: "template-rent", activa: false }));
+    const result = await updateCommitmentTemplateActive("template-rent", { activa: false }, "user-demo");
 
     expect(result.activa).toBe(false);
-    expect(updateCommitmentTemplateRecord).toHaveBeenCalledWith({
-      where: { id: "template-rent" },
+    expect(updateManyCommitmentTemplateRecord).toHaveBeenCalledWith({
+      where: { id: "template-rent", userId: "user-demo" },
       data: { activa: false },
-      select: { id: true, nombre: true, tipo: true, montoDefault: true, diaVencimiento: true, activa: true, notas: true },
     });
     expect(findManyCommitments).not.toHaveBeenCalled();
     expect(createManyCommitments).not.toHaveBeenCalled();
@@ -130,11 +136,13 @@ describe("commitment templates", () => {
     findUniqueCommitmentTemplate.mockResolvedValueOnce({ id: "template-play" });
     updateCommitmentTemplateRecord.mockResolvedValueOnce(commitmentTemplate({ id: "template-play", activa: true }));
 
-    const result = await updateCommitmentTemplateActive("template-play", { activa: true });
+    updateManyCommitmentTemplateRecord.mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrowCommitmentTemplate.mockResolvedValueOnce(commitmentTemplate({ id: "template-play", activa: true }));
+    const result = await updateCommitmentTemplateActive("template-play", { activa: true }, "user-demo");
 
     expect(result.activa).toBe(true);
-    expect(updateCommitmentTemplateRecord).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "template-play" },
+    expect(updateManyCommitmentTemplateRecord).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "template-play", userId: "user-demo" },
       data: { activa: true },
     }));
   });
@@ -142,7 +150,7 @@ describe("commitment templates", () => {
   it("returns a not-found error for missing template IDs", async () => {
     findUniqueCommitmentTemplate.mockResolvedValueOnce(null);
 
-    await expect(updateCommitmentTemplateActive("missing", { activa: false })).rejects.toThrow(
+    await expect(updateCommitmentTemplateActive("missing", { activa: false }, "user-demo")).rejects.toThrow(
       new CommitmentTemplateNotFoundError("Commitment template not found."),
     );
     expect(updateCommitmentTemplateRecord).not.toHaveBeenCalled();
@@ -153,7 +161,7 @@ describe("commitment templates", () => {
     { payload: { activa: "false" }, message: "activa must be a boolean." },
     { payload: {}, message: "activa must be a boolean." },
   ])("rejects invalid toggle payloads", async ({ payload, message }) => {
-    await expect(updateCommitmentTemplateActive("template-rent", payload as { activa?: unknown })).rejects.toThrow(
+    await expect(updateCommitmentTemplateActive("template-rent", payload as { activa?: unknown }, "user-demo")).rejects.toThrow(
       new CommitmentTemplateValidationError(message),
     );
     expect(findUniqueCommitmentTemplate).not.toHaveBeenCalled();
@@ -165,13 +173,14 @@ describe("commitment templates", () => {
     findUniqueCommitmentTemplate.mockResolvedValueOnce({ id: "template-rent" });
     updateCommitmentTemplateRecord.mockResolvedValueOnce(commitmentTemplate({ id: "template-rent", ...payload }));
 
-    const result = await updateCommitmentTemplate("template-rent", payload);
+    updateManyCommitmentTemplateRecord.mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrowCommitmentTemplate.mockResolvedValueOnce(commitmentTemplate({ id: "template-rent", ...payload }));
+    const result = await updateCommitmentTemplate("template-rent", payload, "user-demo");
 
     expect(result.nombre).toBe("Arriendo casa");
-    expect(updateCommitmentTemplateRecord).toHaveBeenCalledWith({
-      where: { id: "template-rent" },
+    expect(updateManyCommitmentTemplateRecord).toHaveBeenCalledWith({
+      where: { id: "template-rent", userId: "user-demo" },
       data: payload,
-      select: { id: true, nombre: true, tipo: true, montoDefault: true, diaVencimiento: true, activa: true, notas: true },
     });
     expect(findManyCommitments).not.toHaveBeenCalled();
     expect(createManyCommitments).not.toHaveBeenCalled();
@@ -184,7 +193,7 @@ describe("commitment templates", () => {
   it("returns a not-found error when editing a missing template", async () => {
     findUniqueCommitmentTemplate.mockResolvedValueOnce(null);
 
-    await expect(updateCommitmentTemplate("missing", { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 29_990, diaVencimiento: null })).rejects.toThrow(
+    await expect(updateCommitmentTemplate("missing", { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 29_990, diaVencimiento: null }, "user-demo")).rejects.toThrow(
       new CommitmentTemplateNotFoundError("Commitment template not found."),
     );
     expect(updateCommitmentTemplateRecord).not.toHaveBeenCalled();
@@ -195,7 +204,7 @@ describe("commitment templates", () => {
     { payload: { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 10_000, diaVencimiento: 0 }, message: "diaVencimiento must be an integer between 1 and 31 or null." },
     { payload: { nombre: "Internet", tipo: CommitmentType.RECURRENTE, montoDefault: 10_000, diaVencimiento: null, activa: "true" }, message: "activa must be a boolean." },
   ])("rejects invalid edit payloads", async ({ payload, message }) => {
-    await expect(updateCommitmentTemplate("template-rent", payload)).rejects.toThrow(new CommitmentTemplateValidationError(message));
+    await expect(updateCommitmentTemplate("template-rent", payload, "user-demo")).rejects.toThrow(new CommitmentTemplateValidationError(message));
     expect(findUniqueCommitmentTemplate).not.toHaveBeenCalled();
     expect(updateCommitmentTemplateRecord).not.toHaveBeenCalled();
   });
@@ -203,13 +212,13 @@ describe("commitment templates", () => {
   it("deletes a template that has not generated commitments without side effects", async () => {
     executeRaw.mockResolvedValueOnce(1);
 
-    await deleteCommitmentTemplate("template-play");
+    await deleteCommitmentTemplate("template-play", "user-demo");
 
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(executeRaw.mock.calls[0]?.[0].join(" ")).toContain("DELETE FROM \"commitment_templates\" AS ct");
     expect(executeRaw.mock.calls[0]?.[0].join(" ")).toContain("NOT EXISTS");
     expect(executeRaw.mock.calls[0]?.[0].join(" ")).toContain("FROM \"commitments\" AS c");
-    expect(executeRaw.mock.calls[0]?.slice(1)).toEqual(["template-play", "template-play"]);
+    expect(executeRaw.mock.calls[0]?.slice(1)).toEqual(["template-play", "user-demo", "template-play"]);
     expect(runTransaction).not.toHaveBeenCalled();
     expect(findUniqueCommitmentTemplate).not.toHaveBeenCalled();
     expect(countCommitments).not.toHaveBeenCalled();
@@ -226,14 +235,14 @@ describe("commitment templates", () => {
     executeRaw.mockResolvedValueOnce(0);
     findUniqueCommitmentTemplate.mockResolvedValueOnce(null);
 
-    await expect(deleteCommitmentTemplate("missing")).rejects.toThrow(
+    await expect(deleteCommitmentTemplate("missing", "user-demo")).rejects.toThrow(
       new CommitmentTemplateNotFoundError("Commitment template not found."),
     );
 
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(runTransaction).not.toHaveBeenCalled();
     expect(findUniqueCommitmentTemplate).toHaveBeenCalledWith({
-      where: { id: "missing" },
+      where: { id: "missing", userId: "user-demo" },
       select: { id: true },
     });
     expect(countCommitments).not.toHaveBeenCalled();
@@ -244,14 +253,14 @@ describe("commitment templates", () => {
     executeRaw.mockResolvedValueOnce(0);
     findUniqueCommitmentTemplate.mockResolvedValueOnce({ id: "template-rent" });
 
-    await expect(deleteCommitmentTemplate("template-rent")).rejects.toThrow(
+    await expect(deleteCommitmentTemplate("template-rent", "user-demo")).rejects.toThrow(
       new CommitmentTemplateDeleteConflictError("Commitment template has generated commitments."),
     );
 
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(runTransaction).not.toHaveBeenCalled();
     expect(findUniqueCommitmentTemplate).toHaveBeenCalledWith({
-      where: { id: "template-rent" },
+      where: { id: "template-rent", userId: "user-demo" },
       select: { id: true },
     });
     expect(countCommitments).not.toHaveBeenCalled();

@@ -2,6 +2,8 @@ import { CommitmentStatus } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+const commitmentPrisma = prisma as any;
+
 export class CommitmentDeleteNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -16,9 +18,9 @@ export class CommitmentDeleteConflictError extends Error {
   }
 }
 
-export async function deleteCommitment(id: string): Promise<void> {
-  const existingCommitment = await prisma.commitment.findUnique({
-    where: { id },
+export async function deleteCommitment(id: string, userId: string): Promise<void> {
+  const existingCommitment = await (commitmentPrisma.commitment.findFirst ?? commitmentPrisma.commitment.findUnique)({
+    where: { id, userId },
     select: { estado: true },
   });
 
@@ -30,8 +32,8 @@ export async function deleteCommitment(id: string): Promise<void> {
     throw new CommitmentDeleteConflictError("Paid commitments cannot be deleted.");
   }
 
-  const deletedCommitment = await prisma.commitment.deleteMany({
-    where: { id, estado: CommitmentStatus.PENDIENTE },
+  const deletedCommitment = await commitmentPrisma.commitment.deleteMany({
+    where: { id, userId, estado: CommitmentStatus.PENDIENTE },
   });
 
   if (deletedCommitment.count === 0) {

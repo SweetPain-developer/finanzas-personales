@@ -2,6 +2,8 @@ import { CommitmentStatus, CommitmentType, type Commitment } from "@prisma/clien
 
 import { prisma } from "../prisma.js";
 
+const commitmentPrisma = prisma as any;
+
 type CreateCommitmentInput = {
   nombre: string;
   tipo: CommitmentType;
@@ -24,10 +26,10 @@ export class CommitmentCreateValidationError extends Error {
   }
 }
 
-export async function createCommitment(payload: unknown): Promise<Commitment> {
+export async function createCommitment(payload: unknown, userId: string): Promise<Commitment> {
   const input = parseCreateCommitmentInput(payload);
 
-  return prisma.commitment.create({
+  return commitmentPrisma.commitment.create({
     data: {
       nombre: input.nombre,
       tipo: input.tipo,
@@ -38,6 +40,7 @@ export async function createCommitment(payload: unknown): Promise<Commitment> {
       anio: input.month.year,
       notas: input.notas,
       templateId: null,
+      userId,
     },
   });
 }

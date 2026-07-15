@@ -3,6 +3,8 @@ import { AccountType, GoalStatus, TransactionType } from "@prisma/client";
 
 import { prisma } from "../prisma.js";
 
+const dashboardPrisma = prisma as any;
+
 type DashboardGoal = Pick<Goal, "id" | "nombre" | "montoObjetivo" | "estado" | "accountId"> & {
   emoji: string;
   account: Pick<Account, "id" | "nombre" | "saldo">;
@@ -85,51 +87,55 @@ export function parseDashboardMonth(month = DEFAULT_MONTH): MonthRange {
   return { year, month: monthNumber, start, end };
 }
 
-export async function getDashboardData(month = DEFAULT_MONTH): Promise<DashboardData> {
+export async function getDashboardData(userId: string, month = DEFAULT_MONTH): Promise<DashboardData> {
   const monthRange = parseDashboardMonth(month);
 
   const [income, expenses, accounts, pendingCommitments, goals, recentTransactions] = await Promise.all([
-    prisma.transaction.aggregate({
+    dashboardPrisma.transaction.aggregate({
       _sum: { monto: true },
       where: {
         tipo: TransactionType.INGRESO,
+        userId,
         transferId: null,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
     }),
-    prisma.transaction.aggregate({
+    dashboardPrisma.transaction.aggregate({
       _sum: { monto: true },
       where: {
         tipo: TransactionType.GASTO,
+        userId,
         transferId: null,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
     }),
-    prisma.account.findMany({
-      where: { activa: true },
+    dashboardPrisma.account.findMany({
+      where: { activa: true, userId },
       orderBy: [{ orden: "asc" }, { nombre: "asc" }],
     }),
-    prisma.commitment.aggregate({
+    dashboardPrisma.commitment.aggregate({
       _sum: { monto: true },
       where: {
         anio: monthRange.year,
         mes: monthRange.month,
+        userId,
         estado: "PENDIENTE",
       },
     }),
-    prisma.goal.findMany({
-      where: { estado: GoalStatus.ACTIVA },
+    dashboardPrisma.goal.findMany({
+      where: { estado: GoalStatus.ACTIVA, userId },
       include: { account: true },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.transaction.findMany({
+    dashboardPrisma.transaction.findMany({
       take: RECENT_RAW_TRANSACTION_LIMIT,
+      where: { userId },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
       include: RECENT_TRANSACTION_INCLUDE,
     }),
-  ]);
+  ]) as [any, any, Account[], any, Array<DashboardGoal & { createdAt: Date }>, DashboardTransactionWithRelations[]];
 
-  const completedRecentTransactions = await fetchMissingRecentTransferPairs(recentTransactions);
+  const completedRecentTransactions = await fetchMissingRecentTransferPairs(recentTransactions, userId);
 
   const operativeBalance = sumBy(
     accounts.filter((account) => account.tipo === AccountType.OPERATIVA),
@@ -162,15 +168,15 @@ export async function getDashboardData(month = DEFAULT_MONTH): Promise<Dashboard
   };
 }
 
-async function fetchMissingRecentTransferPairs(transactions: DashboardTransactionWithRelations[]) {
+async function fetchMissingRecentTransferPairs(transactions: DashboardTransactionWithRelations[], userId: string) {
   const incompleteTransferIds = getIncompleteTransferIds(transactions);
 
   if (incompleteTransferIds.length === 0) {
     return transactions;
   }
 
-  const transferPairs = await prisma.transaction.findMany({
-    where: { transferId: { in: incompleteTransferIds } },
+  const transferPairs = await dashboardPrisma.transaction.findMany({
+    where: { userId, transferId: { in: incompleteTransferIds } },
     orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     include: RECENT_TRANSACTION_INCLUDE,
   });

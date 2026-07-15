@@ -2,6 +2,8 @@ import { CommitmentStatus, CommitmentType, type Commitment } from "@prisma/clien
 
 import { prisma } from "../prisma.js";
 
+const commitmentPrisma = prisma as any;
+
 type UpdateCommitmentInput = {
   nombre: string;
   tipo: CommitmentType;
@@ -37,11 +39,11 @@ export class CommitmentUpdateConflictError extends Error {
   }
 }
 
-export async function updateCommitment(id: string, payload: unknown): Promise<Commitment> {
+export async function updateCommitment(id: string, payload: unknown, userId: string): Promise<Commitment> {
   const input = parseUpdateCommitmentInput(payload);
 
-  const existingCommitment = await prisma.commitment.findUnique({
-    where: { id },
+  const existingCommitment = await (commitmentPrisma.commitment.findFirst ?? commitmentPrisma.commitment.findUnique)({
+    where: { id, userId },
     select: { estado: true },
   });
 
@@ -53,8 +55,8 @@ export async function updateCommitment(id: string, payload: unknown): Promise<Co
     throw new CommitmentUpdateConflictError("Paid commitments cannot be edited.");
   }
 
-  const updatedCommitment = await prisma.commitment.updateMany({
-    where: { id, estado: CommitmentStatus.PENDIENTE },
+  const updatedCommitment = await commitmentPrisma.commitment.updateMany({
+    where: { id, userId, estado: CommitmentStatus.PENDIENTE },
     data: {
       nombre: input.nombre,
       tipo: input.tipo,
@@ -70,7 +72,7 @@ export async function updateCommitment(id: string, payload: unknown): Promise<Co
     throw new CommitmentUpdateNotFoundError("Commitment not found.");
   }
 
-  return prisma.commitment.findUniqueOrThrow({ where: { id } });
+  return (commitmentPrisma.commitment.findFirstOrThrow ?? commitmentPrisma.commitment.findUniqueOrThrow)({ where: { id, userId } });
 }
 
 function parseUpdateCommitmentInput(payload: unknown): UpdateCommitmentInput {

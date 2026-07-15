@@ -5,7 +5,7 @@ import { deleteGoal, GoalDeleteNotFoundError } from "./deleteGoal.js";
 
 const goalDeletionStore = vi.hoisted(() => {
   type AccountRecord = { id: string; saldo: number };
-  type GoalRecord = { id: string; accountId: string; nombre: string; montoObjetivo: number };
+   type GoalRecord = { id: string; accountId: string; nombre: string; montoObjetivo: number; userId?: string };
   type TransactionRecord = { id: string; accountId: string; monto: number; descripcion: string };
 
   const accounts = new Map<string, AccountRecord>();
@@ -41,6 +41,12 @@ vi.mock("../prisma.js", () => ({
 
         return { id: goal.id };
       }),
+      deleteMany: vi.fn(async ({ where }: { where: { id: string; userId: string } }) => {
+        const goal = goalDeletionStore.goals.get(where.id);
+        if (!goal || (goal.userId ?? "user-demo") !== where.userId) return { count: 0 };
+        goalDeletionStore.goals.delete(where.id);
+        return { count: 1 };
+      }),
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => goalDeletionStore.goals.get(where.id) ?? null),
     },
     transaction: {
@@ -50,6 +56,7 @@ vi.mock("../prisma.js", () => ({
 }));
 
 const deleteGoalRecord = prisma.goal.delete as Mock;
+const deleteManyGoalRecord = prisma.goal.deleteMany as Mock;
 const findGoalRecord = prisma.goal.findUnique as Mock;
 const findAccountRecord = prisma.account.findUnique as Mock;
 const findTransactions = prisma.transaction.findMany as Mock;
@@ -58,6 +65,7 @@ describe("deleteGoal", () => {
   beforeEach(() => {
     goalDeletionStore.reset();
     deleteGoalRecord.mockClear();
+    deleteManyGoalRecord.mockClear();
     findGoalRecord.mockClear();
     findAccountRecord.mockClear();
     findTransactions.mockClear();
@@ -71,11 +79,10 @@ describe("deleteGoal", () => {
       montoObjetivo: 1_000_000,
     });
 
-    await deleteGoal("goal-vacations");
+    await deleteGoal("goal-vacations", "user-demo");
 
-    expect(deleteGoalRecord).toHaveBeenCalledWith({
-      where: { id: "goal-vacations" },
-      select: { id: true },
+    expect(deleteManyGoalRecord).toHaveBeenCalledWith({
+      where: { id: "goal-vacations", userId: "user-demo" },
     });
     expect((prisma.account as unknown as { update?: Mock }).update).toBeUndefined();
   });
@@ -104,7 +111,7 @@ describe("deleteGoal", () => {
     const accountBefore = await prisma.account.findUnique({ where: { id: "account-reserve" } });
     const transactionsBefore = await prisma.transaction.findMany({ where: { accountId: "account-reserve" } });
 
-    await deleteGoal("goal-emergency-fund");
+    await deleteGoal("goal-emergency-fund", "user-demo");
 
     await expect(prisma.goal.findUnique({ where: { id: "goal-emergency-fund" } })).resolves.toBeNull();
     await expect(prisma.account.findUnique({ where: { id: "account-reserve" } })).resolves.toEqual(accountBefore);
@@ -112,6 +119,19 @@ describe("deleteGoal", () => {
   });
 
   it("returns a not-found error when the goal does not exist", async () => {
-    await expect(deleteGoal("missing")).rejects.toThrow(GoalDeleteNotFoundError);
+    await expect(deleteGoal("missing", "user-demo")).rejects.toThrow(GoalDeleteNotFoundError);
+  });
+
+  it("does not delete a goal owned by another user", async () => {
+    goalDeletionStore.goals.set("goal-other-user", {
+      id: "goal-other-user",
+      accountId: "account-other-user",
+      nombre: "Other user's goal",
+      montoObjetivo: 100_000,
+      userId: "user-other",
+    });
+
+    await expect(deleteGoal("goal-other-user", "user-demo")).rejects.toThrow(GoalDeleteNotFoundError);
+    expect(goalDeletionStore.goals.has("goal-other-user")).toBe(true);
   });
 });

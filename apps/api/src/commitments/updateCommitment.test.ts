@@ -55,11 +55,11 @@ describe("updateCommitment", () => {
       month: "2026-08",
       fechaVencimiento: "2026-08-18",
       notas: "Boleta ajustada",
-    });
+    }, "user-demo");
 
     expect(result).toMatchObject({ id: "commitment-light", nombre: "Luz casa", monto: 52_000 });
     expect(updateCommitmentRecord).toHaveBeenCalledWith({
-      where: { id: "commitment-light", estado: CommitmentStatus.PENDIENTE },
+      where: { id: "commitment-light", userId: "user-demo", estado: CommitmentStatus.PENDIENTE },
       data: {
         nombre: "Luz casa",
         tipo: CommitmentType.VARIABLE,
@@ -70,7 +70,7 @@ describe("updateCommitment", () => {
         anio: 2026,
       },
     });
-    expect(findUpdatedCommitment).toHaveBeenCalledWith({ where: { id: "commitment-light" } });
+    expect(findUpdatedCommitment).toHaveBeenCalledWith({ where: { id: "commitment-light", userId: "user-demo" } });
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
     expect(createCommitmentTemplate).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe("updateCommitment", () => {
       tipo: "VARIABLE",
       monto: 52_000,
       fechaVencimiento: "2026-07-18",
-    });
+    }, "user-demo");
 
     expect(updateCommitmentRecord).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ mes: 7, anio: 2026 }),
@@ -105,7 +105,7 @@ describe("updateCommitment", () => {
       monto: 350_000,
       fechaVencimiento: "2026-07-05",
       notas: " ",
-    });
+    }, "user-demo");
 
     expect(updateCommitmentRecord).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ notas: null }),
@@ -122,7 +122,7 @@ describe("updateCommitment", () => {
       tipo: "RECURRENTE",
       monto: 10_000,
       fechaVencimiento,
-    });
+    }, "user-demo");
 
     expect(updateCommitmentRecord).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -131,7 +131,7 @@ describe("updateCommitment", () => {
         anio: 2026,
       }),
     }));
-    expect(findUpdatedCommitment).toHaveBeenCalledWith({ where: { id: "commitment-internet" } });
+    expect(findUpdatedCommitment).toHaveBeenCalledWith({ where: { id: "commitment-internet", userId: "user-demo" } });
     expect(createTransaction).not.toHaveBeenCalled();
     expect(updateAccount).not.toHaveBeenCalled();
     expect(createCommitmentTemplate).not.toHaveBeenCalled();
@@ -145,7 +145,7 @@ describe("updateCommitment", () => {
       monto: 10_000,
       month: "2026-07",
       fechaVencimiento: "2026-06-30",
-    })).rejects.toThrow(new CommitmentUpdateValidationError("Due date must be in the selected month."));
+    }, "user-demo")).rejects.toThrow(new CommitmentUpdateValidationError("Due date must be in the selected month."));
 
     expect(updateCommitmentRecord).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe("updateCommitment", () => {
       tipo: "RECURRENTE",
       monto: 29_990,
       fechaVencimiento: "2026-07-12",
-    })).rejects.toThrow(new CommitmentUpdateNotFoundError("Commitment not found."));
+    }, "user-demo")).rejects.toThrow(new CommitmentUpdateNotFoundError("Commitment not found."));
 
     expect(findUpdatedCommitment).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("updateCommitment", () => {
       tipo: "RECURRENTE",
       monto: 20_000,
       fechaVencimiento: "2026-07-03",
-    })).rejects.toThrow(new CommitmentUpdateConflictError("Paid commitments cannot be edited."));
+    }, "user-demo")).rejects.toThrow(new CommitmentUpdateConflictError("Paid commitments cannot be edited."));
 
     expect(updateCommitmentRecord).not.toHaveBeenCalled();
     expect(findUpdatedCommitment).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe("updateCommitment", () => {
     { payload: { nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, month: "2026-13", fechaVencimiento: "2026-07-10" }, message: "Invalid commitment month format. Use YYYY-MM." },
     { payload: { nombre: "Internet", tipo: "RECURRENTE", monto: 10_000, fechaVencimiento: "2026-07-32" }, message: "Invalid due date." },
   ])("rejects invalid update payloads", async ({ payload, message }) => {
-    await expect(updateCommitment("commitment-internet", payload)).rejects.toThrow(new CommitmentUpdateValidationError(message));
+    await expect(updateCommitment("commitment-internet", payload, "user-demo")).rejects.toThrow(new CommitmentUpdateValidationError(message));
 
     expect(updateCommitmentRecord).not.toHaveBeenCalled();
     expect(createTransaction).not.toHaveBeenCalled();
@@ -217,6 +217,7 @@ function commitment(overrides: Partial<Commitment> & { id: string; nombre: strin
     mes: 7,
     anio: 2026,
     notas: null,
+    userId: "user-demo",
     createdAt: new Date("2026-07-01T00:00:00.000Z"),
     updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     templateId: null,
