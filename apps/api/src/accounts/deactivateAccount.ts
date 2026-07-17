@@ -1,5 +1,6 @@
 import type { Account } from "@prisma/client";
 import { prisma } from "../prisma.js";
+import { hasLoanHistory, LoanAccountConflictError } from "./loanAccountGuard.js";
 
 const accountWriter = prisma as unknown as {
   account: {
@@ -15,7 +16,13 @@ export class AccountDeactivateNotFoundError extends Error {
   }
 }
 
+export { LoanAccountConflictError };
+
 export async function deactivateAccount(id: string, userId: string) {
+  if (await hasLoanHistory(id, userId)) {
+    throw new LoanAccountConflictError();
+  }
+
   const updatedAccount = await accountWriter.account.updateMany({
     where: { id, userId },
     data: { activa: false },

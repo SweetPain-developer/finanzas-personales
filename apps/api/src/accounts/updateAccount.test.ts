@@ -1,24 +1,32 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { prisma } from '../prisma.js';
-import { AccountUpdateNotFoundError, updateAccount } from './updateAccount.js';
+import { AccountUpdateNotFoundError, LoanAccountConflictError, updateAccount } from './updateAccount.js';
 import { UpdateAccountDTO } from '@finanzas-personales/shared-types';
 
 vi.mock('../prisma.js', () => ({
-  prisma: {
+    prisma: {
     account: {
       updateMany: vi.fn(),
+      findFirst: vi.fn(),
       findFirstOrThrow: vi.fn(),
+      },
+      transaction: { findFirst: vi.fn().mockResolvedValue(null) },
     },
-  },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
 const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
+const findFirstMock = prisma.account.findFirst as Mock;
+const findLoanTransactionMock = prisma.transaction.findFirst as Mock;
 
 describe('updateAccount', () => {
   beforeEach(() => {
     updateManyMock.mockReset();
     findFirstOrThrowMock.mockReset();
+    findFirstMock.mockReset();
+    findFirstMock.mockResolvedValue({ tipo: "OPERATIVA" });
+    findLoanTransactionMock.mockReset();
+    findLoanTransactionMock.mockResolvedValue(null);
   });
 
   it('maps DTO fields to Prisma account fields', async () => {
@@ -84,5 +92,14 @@ describe('updateAccount', () => {
       where: { id: 'account-other-user', userId: 'user-owner' },
     }));
     expect(findFirstOrThrowMock).not.toHaveBeenCalled();
+  });
+
+  it("does not change the type of an account referenced by a loan transaction", async () => {
+    findFirstMock.mockResolvedValueOnce({ tipo: "OPERATIVA" });
+    findLoanTransactionMock.mockResolvedValueOnce({ id: "loan-delivery-tx" });
+
+    await expect(updateAccount("account-demo-primary", { name: "Cuenta", type: "DEUDA", balance: 0 }, "user-demo"))
+      .rejects.toBeInstanceOf(LoanAccountConflictError);
+    expect(updateManyMock).not.toHaveBeenCalled();
   });
 });

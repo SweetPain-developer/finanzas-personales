@@ -32,7 +32,7 @@ type TransactionClientWithOwnership = Prisma.TransactionClient & {
 };
 
 type OwnedTransactionOperations = {
-  findFirst(args: { where: { id: string; userId: string } }): Promise<Transaction | null>;
+  findFirst(args: { where: { id: string; userId: string }; include?: { loanDelivery: boolean; loanRepayment: boolean } }): Promise<(Transaction & { loanDelivery?: unknown; loanRepayment?: unknown }) | null>;
   findMany(args: { where: { transferId: string; userId: string }; orderBy: { tipo: "asc" } }): Promise<Transaction[]>;
   updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
 };
@@ -70,9 +70,16 @@ export async function updateMovement(id: string, payload: unknown, userId: strin
     return await prisma.$transaction(async (tx) => {
       const ownedTx = tx as TransactionClientWithOwnership;
       const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
-      const existing = await transactionOperations.findFirst({ where: { id, userId } });
+       const existing = await transactionOperations.findFirst({ where: { id, userId } });
 
-      if (input.tipo === "TRANSFERENCIA" || (existing !== null && (existing.transferId !== null || existing.categoryId === null))) {
+       const linked = existing && existing.categoryId === null
+         ? await transactionOperations.findFirst({ where: { id, userId }, include: { loanDelivery: true, loanRepayment: true } })
+         : existing;
+       if (linked?.loanDelivery || linked?.loanRepayment) {
+         throw new MovementUpdateConflictError("Loan-linked transactions must be edited through the loan endpoint.");
+       }
+
+       if (input.tipo === "TRANSFERENCIA" || (existing !== null && (existing.transferId !== null || existing.categoryId === null))) {
         return updateTransferMovement(ownedTx, id, existing, input, fecha, userId);
       }
 

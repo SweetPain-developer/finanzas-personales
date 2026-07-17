@@ -38,12 +38,16 @@ type SortableDashboardTransaction = DashboardTransaction & {
 export type DashboardData = {
   currentMonthLabel: string;
   availableToSpend: number;
+  operativeBalance: number;
+  pendingCommitmentsTotal: number;
   liquidNetWorth: number;
   liquidNetWorthVariation: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   goals: DashboardGoal[];
   recentTransactions: DashboardTransaction[];
+  pendingLoansTotal: number;
+  pendingLoansCount: number;
 };
 
 type MonthRange = {
@@ -90,13 +94,15 @@ export function parseDashboardMonth(month = DEFAULT_MONTH): MonthRange {
 export async function getDashboardData(userId: string, month = DEFAULT_MONTH): Promise<DashboardData> {
   const monthRange = parseDashboardMonth(month);
 
-  const [income, expenses, accounts, pendingCommitments, goals, recentTransactions] = await Promise.all([
+  const [income, expenses, accounts, pendingCommitments, goals, recentTransactions, pendingLoans] = await Promise.all([
     dashboardPrisma.transaction.aggregate({
       _sum: { monto: true },
       where: {
         tipo: TransactionType.INGRESO,
         userId,
-        transferId: null,
+          transferId: null,
+          loanDelivery: null,
+          loanRepayment: null,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
     }),
@@ -105,7 +111,9 @@ export async function getDashboardData(userId: string, month = DEFAULT_MONTH): P
       where: {
         tipo: TransactionType.GASTO,
         userId,
-        transferId: null,
+          transferId: null,
+          loanDelivery: null,
+          loanRepayment: null,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
     }),
@@ -129,11 +137,15 @@ export async function getDashboardData(userId: string, month = DEFAULT_MONTH): P
     }),
     dashboardPrisma.transaction.findMany({
       take: RECENT_RAW_TRANSACTION_LIMIT,
-      where: { userId },
+      where: { userId, loanDelivery: null, loanRepayment: null },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
       include: RECENT_TRANSACTION_INCLUDE,
     }),
-  ]) as [any, any, Account[], any, Array<DashboardGoal & { createdAt: Date }>, DashboardTransactionWithRelations[]];
+    dashboardPrisma.loan?.findMany?.({
+      where: { userId, estado: "PENDIENTE" },
+      select: { montoEntregado: true, devoluciones: { select: { monto: true } } },
+    }) ?? Promise.resolve([]),
+  ]) as [any, any, Account[], any, Array<DashboardGoal & { createdAt: Date }>, DashboardTransactionWithRelations[], Array<{ montoEntregado: number; devoluciones: Array<{ monto: number }> }>];
 
   const completedRecentTransactions = await fetchMissingRecentTransferPairs(recentTransactions, userId);
 
@@ -146,11 +158,15 @@ export async function getDashboardData(userId: string, month = DEFAULT_MONTH): P
   return {
     currentMonthLabel: capitalize(monthLabelFormatter.format(monthRange.start)),
     availableToSpend: operativeBalance - pendingCommitmentsTotal,
+    operativeBalance,
+    pendingCommitmentsTotal,
     // Explicit v1 interpretation: liquid net worth is the sum of all active account balances.
     liquidNetWorth: sumBy(accounts, (account) => account.saldo),
     liquidNetWorthVariation: 0,
     monthlyIncome: income._sum.monto ?? 0,
     monthlyExpenses: expenses._sum.monto ?? 0,
+    pendingLoansTotal: sumBy(pendingLoans, (loan) => loan.montoEntregado - sumBy(loan.devoluciones, (repayment) => repayment.monto)),
+    pendingLoansCount: pendingLoans.length,
     goals: goals.map((goal) => ({
       id: goal.id,
       nombre: goal.nombre,

@@ -22,6 +22,7 @@ type DashboardProps = {
   onNavigateAccounts?: () => void;
   onNavigateGoals?: () => void;
   onNavigateCommitments?: () => void;
+  onNavigateLoans?: () => void;
 };
 
 const NAV_ITEMS = [
@@ -75,7 +76,7 @@ function formatVariation(amount: number) {
   return formatCLP(amount, amount > 0 ? "positive" : "negative");
 }
 
-export function Dashboard({ data, onQuickEntry, onNavigateMovements, onNavigateAccounts, onNavigateGoals, onNavigateCommitments }: DashboardProps) {
+export function Dashboard({ data, onQuickEntry, onNavigateMovements, onNavigateAccounts, onNavigateGoals, onNavigateCommitments, onNavigateLoans }: DashboardProps) {
   const netWorthVariationTone = data.liquidNetWorthVariation < 0 ? "negative" : "positive";
 
   return (
@@ -87,8 +88,20 @@ export function Dashboard({ data, onQuickEntry, onNavigateMovements, onNavigateA
         </div>
 
         <div className="dashboard-card dashboard-card--hero">
-          <p className="dashboard-eyebrow">Disponible para gastar</p>
+          <p className="dashboard-eyebrow">Disponible operativo estimado</p>
+          <p className="dashboard-hero-supporting-text">Después de reservar compromisos pendientes</p>
           <p className="dashboard-hero-amount">{formatCLP(data.availableToSpend)}</p>
+          <p className="dashboard-hero-formula">Saldo operativo − compromisos pendientes = disponible operativo estimado</p>
+          <dl className="dashboard-hero-breakdown">
+            <div className="dashboard-hero-breakdown-row">
+              <dt>Saldo operativo</dt>
+              <dd>{formatCLP(data.operativeBalance)}</dd>
+            </div>
+            <div className="dashboard-hero-breakdown-row">
+              <dt>Compromisos pendientes</dt>
+              <dd>{formatCLP(data.pendingCommitmentsTotal)}</dd>
+            </div>
+          </dl>
         </div>
 
         <div className="dashboard-card dashboard-card--row">
@@ -112,6 +125,11 @@ export function Dashboard({ data, onQuickEntry, onNavigateMovements, onNavigateA
             <p className="dashboard-summary-amount">{formatCLP(data.monthlyExpenses)}</p>
           </div>
         </div>
+
+        <button type="button" className="dashboard-card dashboard-loans-card" onClick={onNavigateLoans}>
+          <div><p className="dashboard-label">Por cobrar</p><p className="dashboard-loans-amount">{formatCLP(data.pendingLoansTotal ?? 0)} por cobrar</p><p className="dashboard-loans-support">{data.pendingLoansCount ? `${data.pendingLoansCount} préstamo${data.pendingLoansCount === 1 ? "" : "s"} pendiente${data.pendingLoansCount === 1 ? "" : "s"}` : "Sin préstamos pendientes"}</p></div>
+          <span className="dashboard-link-button">Ver préstamos →</span>
+        </button>
 
         <section className="dashboard-section">
           <div className="dashboard-section-header">
@@ -193,6 +211,7 @@ export function Dashboard({ data, onQuickEntry, onNavigateMovements, onNavigateA
                 <button
                   key={item.key}
                   className={`dashboard-nav-item${isActive ? " dashboard-nav-item--active" : ""}`}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={
                     item.key === "movements"
                       ? onNavigateMovements

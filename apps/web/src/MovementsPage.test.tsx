@@ -13,6 +13,8 @@ import type { MovementsData } from "./movementTypes";
 const dashboardData: DashboardData = {
   currentMonthLabel: "Julio 2026",
   availableToSpend: 345000,
+  operativeBalance: 500000,
+  pendingCommitmentsTotal: 155000,
   liquidNetWorth: 1250000,
   liquidNetWorthVariation: 50000,
   monthlyIncome: 1200000,
@@ -99,13 +101,12 @@ afterEach(() => {
 
 describe("MovementsPage", () => {
   it("opens from the dashboard bottom nav Mov item", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((input: RequestInfo | URL) => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
         return Promise.resolve(jsonResponse(url.includes("movements") ? movementsData : dashboardData));
-      }),
-    );
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
 
@@ -113,6 +114,7 @@ describe("MovementsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Movimientos" })).toBeInTheDocument();
     expect(screen.getAllByText("Delivery")[0]).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/movements?month=2026-07", expect.objectContaining({ credentials: "include" }));
   });
 
   it("renders loading while movements load", () => {

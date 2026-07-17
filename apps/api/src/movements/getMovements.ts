@@ -11,6 +11,8 @@ type TransactionWithRelations = Pick<
 > & {
   account: MovementAccount;
   category: MovementCategory | null;
+  loanDelivery: { id: string } | null;
+  loanRepayment: { id: string } | null;
 };
 
 export type NormalMovement = {
@@ -21,6 +23,8 @@ export type NormalMovement = {
   account: MovementAccount;
   category: MovementCategory | null;
   fecha: string;
+  classification: "ORDINARY" | "LOAN_DELIVERY" | "LOAN_REPAYMENT";
+  loanId: string | null;
 };
 
 export type TransferMovement = {
@@ -85,7 +89,7 @@ const movementReader = prisma as unknown as {
   transaction: {
     findMany(args: {
       where: { userId: string; fecha: { gte: Date; lt: Date } };
-      include: { account: { select: { id: true; nombre: true } }; category: true };
+      include: { account: { select: { id: true; nombre: true } }; category: true; loanDelivery: { select: { id: true } }; loanRepayment: { select: { id: true; loanId: true } } };
       orderBy: Array<Record<string, "asc" | "desc">>;
     }): Promise<TransactionWithRelations[]>;
   };
@@ -126,7 +130,7 @@ export async function getMovements(userId: string, filters: MovementFilters = {}
         userId,
         fecha: { gte: monthRange.start, lt: monthRange.end },
       },
-      include: { account: { select: { id: true, nombre: true } }, category: true },
+      include: { account: { select: { id: true, nombre: true } }, category: true, loanDelivery: { select: { id: true } }, loanRepayment: { select: { id: true, loanId: true } } },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     }),
   ]);
@@ -222,6 +226,7 @@ function toTransferMovement(transactions: TransactionWithRelations[]): TransferM
 }
 
 function toNormalMovement(transaction: TransactionWithRelations): NormalMovement {
+  const loanId = transaction.loanDelivery?.id ?? (transaction.loanRepayment as { loanId?: string } | null)?.loanId ?? null;
   return {
     id: transaction.id,
     tipo: transaction.tipo === TransactionType.INGRESO ? "INGRESO" : "GASTO",
@@ -230,6 +235,8 @@ function toNormalMovement(transaction: TransactionWithRelations): NormalMovement
     account: transaction.account,
     category: transaction.category,
     fecha: toIsoDate(transaction.fecha),
+    classification: transaction.loanDelivery ? "LOAN_DELIVERY" : transaction.loanRepayment ? "LOAN_REPAYMENT" : "ORDINARY",
+    loanId,
   };
 }
 

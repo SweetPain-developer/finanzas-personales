@@ -19,6 +19,9 @@ vi.mock("../prisma.js", () => ({
     goal: {
       findMany: vi.fn(),
     },
+    loan: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -27,6 +30,7 @@ const findManyAccounts = prisma.account.findMany as Mock;
 const aggregateCommitments = prisma.commitment.aggregate as Mock;
 const findManyGoals = prisma.goal.findMany as Mock;
 const findManyTransactions = prisma.transaction.findMany as Mock;
+const findManyLoans = prisma.loan.findMany as Mock;
 
 describe("getDashboardData", () => {
   beforeEach(() => {
@@ -35,6 +39,7 @@ describe("getDashboardData", () => {
     aggregateCommitments.mockReset();
     findManyGoals.mockReset();
     findManyTransactions.mockReset();
+    findManyLoans.mockReset();
   });
 
   it("calculates dashboard totals for the requested month using non-transfer transactions", async () => {
@@ -81,7 +86,10 @@ describe("getDashboardData", () => {
 
     expect(result.monthlyIncome).toBe(2_000);
     expect(result.monthlyExpenses).toBe(750);
+    expect(result.operativeBalance).toBe(1_500);
+    expect(result.pendingCommitmentsTotal).toBe(400);
     expect(result.availableToSpend).toBe(1_100);
+    expect(result.availableToSpend).toBe(result.operativeBalance - result.pendingCommitmentsTotal);
     expect(result.liquidNetWorth).toBe(2_000);
     expect(result.goals[0]?.account.saldo).toBe(200);
     expect(result.recentTransactions[0]?.displayDate).toBe("05 jul");
@@ -112,6 +120,26 @@ describe("getDashboardData", () => {
     );
   });
 
+  it("excludes loan-linked transactions from ordinary metrics and sums only pending loans", async () => {
+    aggregateTransaction.mockResolvedValueOnce({ _sum: { monto: 1_000 } }).mockResolvedValueOnce({ _sum: { monto: 2_000 } });
+    findManyAccounts.mockResolvedValue([account({ id: "checking", nombre: "Checking", tipo: AccountType.OPERATIVA, saldo: 8_000, orden: 1 })]);
+    aggregateCommitments.mockResolvedValue({ _sum: { monto: 0 } });
+    findManyGoals.mockResolvedValue([]);
+    findManyTransactions.mockResolvedValue([]);
+    findManyLoans.mockResolvedValue([
+      { montoEntregado: 10_000, devoluciones: [{ monto: 3_000 }] },
+      { montoEntregado: 50_000, devoluciones: [{ monto: 50_000 }] },
+    ]);
+
+    const result = await getDashboardData("user-demo", "2026-07");
+
+    expect(result.pendingLoansTotal).toBe(7_000);
+    expect(result.pendingLoansCount).toBe(2);
+    expect(findManyLoans).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-demo", estado: "PENDIENTE" } }));
+    expect(aggregateTransaction).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: expect.objectContaining({ loanDelivery: null, loanRepayment: null }) }));
+    expect(aggregateTransaction).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: expect.objectContaining({ loanDelivery: null, loanRepayment: null }) }));
+  });
+
   it("excludes savings and reserves from available-to-spend subtraction", async () => {
     aggregateTransaction.mockResolvedValueOnce({ _sum: { monto: null } }).mockResolvedValueOnce({ _sum: { monto: null } });
     findManyAccounts.mockResolvedValue([
@@ -126,6 +154,8 @@ describe("getDashboardData", () => {
     const result = await getDashboardData("user-demo", "2026-07");
 
     expect(result.availableToSpend).toBe(1_100);
+    expect(result.operativeBalance).toBe(1_500);
+    expect(result.pendingCommitmentsTotal).toBe(400);
     expect(result.liquidNetWorth).toBe(31_500);
   });
 

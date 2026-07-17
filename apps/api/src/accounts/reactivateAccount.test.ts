@@ -1,24 +1,29 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 import { prisma } from "../prisma.js";
-import { AccountReactivateNotFoundError, reactivateAccount } from "./reactivateAccount.js";
+import { AccountReactivateNotFoundError, LoanAccountConflictError, reactivateAccount } from "./reactivateAccount.js";
 
 vi.mock("../prisma.js", () => ({
   prisma: {
     account: {
       updateMany: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue({ tipo: "OPERATIVA" }),
       findFirstOrThrow: vi.fn(),
     },
+    transaction: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
 const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
+const findLoanTransactionMock = prisma.transaction.findFirst as Mock;
 
 describe("reactivateAccount", () => {
   beforeEach(() => {
     updateManyMock.mockReset();
     findFirstOrThrowMock.mockReset();
+    findLoanTransactionMock.mockReset();
+    findLoanTransactionMock.mockResolvedValue(null);
   });
 
   it("reactivates an existing account", async () => {
@@ -72,5 +77,13 @@ describe("reactivateAccount", () => {
       data: { activa: true },
     });
     expect(findFirstOrThrowMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reactivate a loan-linked DEUDA account into an invalid active state", async () => {
+    (prisma.account.findFirst as Mock).mockResolvedValueOnce({ tipo: "DEUDA" });
+    findLoanTransactionMock.mockResolvedValueOnce({ id: "loan-delivery-tx" });
+
+    await expect(reactivateAccount("account-debt", "user-demo")).rejects.toBeInstanceOf(LoanAccountConflictError);
+    expect(updateManyMock).not.toHaveBeenCalled();
   });
 });

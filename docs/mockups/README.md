@@ -18,10 +18,11 @@ Cada `.jsx` en esta carpeta es la versión ejecutable de los wireframes descrito
 | `04-gestion-cuentas.jsx` | Gestión de cuentas | Agrupación por tipo, cuentas inactivas colapsadas, edición de saldo directo, y advertencia al desactivar una cuenta con meta activa asociada |
 | `05-metas.jsx` | Seguimiento de metas | Atajo "Agregar a esta meta" con cuenta destino fija, y creación de cuenta dedicada al vuelo desde el editor de meta |
 | `06-movimientos.jsx` | Listado con filtros | Agrupación por día, filtros de cuenta/período/categoría, y transferencias fusionadas visualmente en una sola línea |
+| `07-prestamos.jsx` | Préstamos por cobrar | Acceso desde la tarjeta persistente del Dashboard y desde Ingreso rápido; flujo separado para entregar préstamo o registrar devolución, saldo pendiente derivado, estados y auditoría de devoluciones |
 
 ## Decisiones de diseño ya validadas acá
 
-Estos mockups ya reflejan las decisiones cerradas en la sección 7 de `diseno_ui_finanzas_personales.md`:
+Estos mockups ya reflejan las decisiones cerradas en la sección 8 de `diseno_ui_finanzas_personales.md`:
 
 1. Sin barra de "presupuesto mensual" — el disponible es un número absoluto.
 2. Transferencias se guardan como `GASTO`/`INGRESO` vinculados por `transferId`, excluidos del cálculo de ingresos/gastos del mes.
@@ -35,3 +36,4 @@ Estos mockups ya reflejan las decisiones cerradas en la sección 7 de `diseno_ui
 - Un solo archivo por pantalla, `export default` del componente principal.
 - Datos mock declarados arriba del componente, comentados si simulan una relación con otra entidad (ej. `METAS_ACTIVAS` simulando `Goal` filtrado por `accountId`).
 - Si el mockup revela una decisión de diseño o de schema que faltaba cerrar, esa decisión se documenta en `diseno_ui_finanzas_personales.md`, no acá — este README es un índice, no el lugar donde se registran decisiones.
+- Para `07-prestamos.jsx`, el mockup debe validar únicamente el diseño aprobado del primer slice. No debe presentarse como implementación productiva ni asumir que `Loan`, `LoanRepayment` o la transacción de entrega ya existen en el schema o la API.

@@ -1,6 +1,6 @@
 // Finanzas Personales — Prisma Schema
 // Generado: 04 de julio de 2026
-// Revisado: 04 de julio de 2026 — agrega CommitmentTemplate (recurrentes activables/pausables por mes)
+// Revisado: 16 de julio de 2026 — ownership y schema de préstamos por cobrar
 
 generator client {
   provider = "prisma-client-js"
@@ -25,6 +25,8 @@ model User {
   commitmentTemplates CommitmentTemplate[]
   commitments         Commitment[]
   goals               Goal[]
+  loans               Loan[]             @relation("UserLoans")
+  loanRepayments      LoanRepayment[]    @relation("UserLoanRepayments")
 
   @@map("users")
 }
@@ -115,6 +117,8 @@ model Transaction {
 
   // Vínculo opcional cuando la transacción fue creada al pagar un compromiso.
   commitmentPayment Commitment?    @relation("CommitmentPayment")
+  loanDelivery       Loan?          @relation("LoanDelivery")
+  loanRepayment      LoanRepayment? @relation("LoanRepaymentTransaction")
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -123,6 +127,7 @@ model Transaction {
   @@index([accountId])
   @@index([fecha])
   @@index([transferId])
+  @@unique([id, userId])
   @@map("transactions")
 }
 
@@ -130,6 +135,62 @@ enum TransactionType {
   INGRESO       // plata que entra a la cuenta
   GASTO         // plata que sale de la cuenta
   TRANSFERENCIA // movimiento vinculado a otro (comparte transferId)
+}
+
+// ─────────────────────────────────────────────
+// PRÉSTAMOS POR COBRAR
+// ─────────────────────────────────────────────
+// Un Loan representa una entrega independiente a una persona. El saldo
+// pendiente se deriva de montoEntregado menos la suma de devoluciones.
+
+model Loan {
+  id                    String          @id @default(cuid())
+  persona               String
+  montoEntregado        Int             // siempre positivo; saldo pendiente es derivado
+  estado                LoanStatus      @default(PENDIENTE)
+  notas                 String?
+  entregaTransactionId  String          @unique
+  userId                String
+
+  user                  User            @relation("UserLoans", fields: [userId], references: [id], onDelete: Restrict)
+  entregaTransaction    Transaction     @relation("LoanDelivery", fields: [entregaTransactionId, userId], references: [id, userId], onDelete: Restrict)
+  devoluciones          LoanRepayment[]  @relation("LoanRepaymentLoan")
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([userId, estado])
+  @@unique([id, userId])
+  @@unique([entregaTransactionId, userId])
+  @@map("loans")
+}
+
+model LoanRepayment {
+  id              String      @id @default(cuid())
+  monto           Int         // siempre positivo; el saldo pendiente se calcula desde el historial
+  loanId          String
+  transactionId   String      @unique
+  userId          String
+
+  loan            Loan        @relation("LoanRepaymentLoan", fields: [loanId, userId], references: [id, userId], onDelete: Restrict)
+  transaction     Transaction @relation("LoanRepaymentTransaction", fields: [transactionId, userId], references: [id, userId], onDelete: Restrict)
+  user            User        @relation("UserLoanRepayments", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([userId, loanId])
+  @@index([loanId])
+  @@unique([transactionId, userId])
+  @@map("loan_repayments")
+}
+
+enum LoanStatus {
+  PENDIENTE
+  SALDADO
+  INCOBRABLE
 }
 
 // ─────────────────────────────────────────────

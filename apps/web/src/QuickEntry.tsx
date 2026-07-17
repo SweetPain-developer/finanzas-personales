@@ -17,8 +17,9 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { authenticatedFetch } from "./authClient";
 
-type MovementType = "GASTO" | "INGRESO" | "TRANSFERENCIA";
+type MovementType = "GASTO" | "INGRESO" | "TRANSFERENCIA" | "PRESTAMO";
 
 type Account = {
   id: string;
@@ -49,6 +50,7 @@ type QuickEntryPageState =
 type QuickEntryPageProps = {
   onClose: () => void;
   onSaved?: () => void;
+  onLoanAction?: (mode: "create" | "repay") => void;
 };
 
 const QUICK_ENTRY_OPTIONS_ENDPOINT = "/api/quick-entry/options";
@@ -115,7 +117,7 @@ type CreateTransactionPayload =
       fecha: string;
     };
 
-export function QuickEntryPage({ onClose, onSaved }: QuickEntryPageProps) {
+export function QuickEntryPage({ onClose, onSaved, onLoanAction }: QuickEntryPageProps) {
   const [state, setState] = useState<QuickEntryPageState>({ status: "loading" });
 
   useEffect(() => {
@@ -123,7 +125,7 @@ export function QuickEntryPage({ onClose, onSaved }: QuickEntryPageProps) {
 
     async function loadOptions() {
       try {
-        const response = await fetch(QUICK_ENTRY_OPTIONS_ENDPOINT, { signal: abortController.signal });
+        const response = await authenticatedFetch(QUICK_ENTRY_OPTIONS_ENDPOINT, { signal: abortController.signal });
 
         if (!response.ok) {
           throw new Error(`Quick-entry options request failed with status ${response.status}.`);
@@ -156,10 +158,10 @@ export function QuickEntryPage({ onClose, onSaved }: QuickEntryPageProps) {
     return <QuickEntryStatus message={state.message} />;
   }
 
-  return <QuickEntry options={state.options} onClose={onClose} onSaved={onSaved} />;
+  return <QuickEntry options={state.options} onClose={onClose} onSaved={onSaved} onLoanAction={onLoanAction} />;
 }
 
-export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & { options: QuickEntryOptions }) {
+export function QuickEntry({ options, onClose, onSaved, onLoanAction }: QuickEntryPageProps & { options: QuickEntryOptions }) {
   const [type, setType] = useState<MovementType>("GASTO");
   const [amountRaw, setAmountRaw] = useState("");
   const [originAccountId, setOriginAccountId] = useState(() => options.lastUsedAccountId ?? options.accounts[0]?.id ?? "");
@@ -173,6 +175,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
   const isSavingRef = useRef(false);
 
   const categories = type === "INGRESO" ? options.categories.INGRESO : options.categories.GASTO;
+  const isLoan = type === "PRESTAMO";
 
   useEffect(() => {
     amountInputRef.current?.focus();
@@ -216,7 +219,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
     setSaveError(null);
 
     try {
-      const response = await fetch(TRANSACTIONS_ENDPOINT, {
+      const response = await authenticatedFetch(TRANSACTIONS_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildCreateTransactionPayload()),
@@ -255,7 +258,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
 
     return {
       ...sharedPayload,
-      tipo: type,
+      tipo: type === "PRESTAMO" ? "GASTO" : type,
       accountId: originAccountId,
       categoryId: categoryId ?? "",
     };
@@ -278,6 +281,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
           <TypeButton label="Gasto" type="GASTO" activeType={type} onSelect={changeType} />
           <TypeButton label="Ingreso" type="INGRESO" activeType={type} onSelect={changeType} />
           <TypeButton iconOnlyLabel="Transferencia" type="TRANSFERENCIA" activeType={type} onSelect={changeType} />
+          <TypeButton label="Préstamo" type="PRESTAMO" activeType={type} onSelect={changeType} />
         </div>
 
         <div className="quick-entry-amount-block">
@@ -301,7 +305,13 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
             </p>
           ) : null}
 
-          {type === "TRANSFERENCIA" ? (
+          {isLoan ? (
+            <div className="quick-entry-loan-actions">
+              <p className="quick-entry-field-label">Un préstamo no es gasto ni ingreso.</p>
+              <button type="button" className="quick-entry-loan-action" onClick={() => onLoanAction?.("create")}><span>Entregar préstamo</span><ArrowLeftRight size={16} /></button>
+              <button type="button" className="quick-entry-loan-action" onClick={() => onLoanAction?.("repay")}><span>Registrar devolución</span><ArrowLeftRight size={16} /></button>
+            </div>
+          ) : type === "TRANSFERENCIA" ? (
             <>
               <FieldGroup label="Desde">
                 <AccountChips accounts={options.accounts} selectedId={originAccountId} onSelect={changeOriginAccount} />
@@ -326,7 +336,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
             </>
           )}
 
-          <FieldGroup label="Descripción (opcional)">
+          {!isLoan ? <FieldGroup label="Descripción (opcional)">
             <input
               className="quick-entry-text-input"
               type="text"
@@ -334,7 +344,7 @@ export function QuickEntry({ options, onClose, onSaved }: QuickEntryPageProps & 
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Ej: almuerzo con..."
             />
-          </FieldGroup>
+          </FieldGroup> : null}
 
           <div className="quick-entry-date-row" aria-label="Fecha">
             <span>Fecha</span>
@@ -367,7 +377,7 @@ function TypeButton({
 }: {
   label?: string;
   iconOnlyLabel?: string;
-  type: MovementType;
+      type: MovementType;
   activeType: MovementType;
   onSelect: (type: MovementType) => void;
 }) {

@@ -501,7 +501,58 @@ Al tocar `[+]` o una meta existente:
 
 ---
 
-## 7. Decisiones cerradas (04 jul 2026)
+## 7. Préstamos por cobrar
+
+> **Estado**: diseño aprobado, pendiente de implementación. Esta sección registra el primer slice del módulo; no declara cambios realizados en el schema, la API ni la aplicación productiva.
+
+### Propósito y límites del concepto
+
+Un préstamo por cobrar representa **dinero entregado a otra persona que la persona usuaria espera recuperar**. No es un gasto ni un ingreso ordinario: la entrega reduce una cuenta propia, pero conserva un derecho de cobro; la devolución aumenta la cuenta elegida y reduce ese derecho.
+
+Las entregas y devoluciones quedan fuera de las métricas ordinarias de ingresos y gastos. Tampoco usan `transferId`, porque no representan dinero moviéndose entre dos cuentas propias. El saldo pendiente del préstamo se deriva del monto entregado menos la suma de sus devoluciones.
+
+### Alcance del primer slice
+
+| Área | Decisión cerrada |
+|---|---|
+| Cuentas para entregar | Solo cuentas activas de tipo `OPERATIVA`, `AHORRO` o `RESERVA`. Se excluyen `DEUDA` y `CMR`. La entrega no puede superar el saldo disponible de la cuenta origen. |
+| Cuentas para devolver | La devolución se registra en una cuenta activa permitida y no puede superar el saldo pendiente del préstamo. La cuenta destino aumenta por el monto devuelto. |
+| Personas | La persona se captura como texto obligatorio. En este primer slice no existe catálogo de contactos ni entidad de persona. |
+| Préstamos por persona | Una persona puede tener múltiples préstamos. Cada nueva entrega crea un préstamo independiente; no se agrega automáticamente a un préstamo existente. |
+| Modelo conceptual | `Loan` representa el préstamo; la entrega tiene una transacción asociada; cada devolución se registra como `LoanRepayment`. El saldo pendiente es derivado, no un saldo editable independiente. |
+| Estados | `PENDIENTE`, `SALDADO` e `INCOBRABLE`. Un préstamo pasa a `SALDADO` cuando el saldo derivado llega a cero. |
+
+### Flujo y navegación
+
+- La pantalla es accesible desde la tarjeta **Por cobrar** del Dashboard y desde **Ingreso rápido**.
+- Ingreso rápido incorpora el tipo **Préstamo**, con las acciones **Entregar préstamo** y **Registrar devolución**.
+- No se agrega un sexto botón al bottom navigation. La navegación existente se mantiene sin una pestaña permanente adicional.
+- La tarjeta **Por cobrar** permanece visible y accesible incluso cuando el total es `$0`.
+- La tarjeta suma únicamente préstamos `PENDIENTE`; excluye `SALDADO` e `INCOBRABLE`.
+
+### Registro y saldo financiero
+
+Al entregar un préstamo, la cuenta origen disminuye por el monto entregado. Al registrar una devolución, la cuenta destino aumenta por el monto devuelto. La entrega y cada devolución deben conservar su fecha, monto y cuenta para permitir auditoría e historial.
+
+El detalle de cada préstamo muestra el saldo pendiente derivado y el historial de cada devolución con:
+
+- fecha;
+- monto;
+- cuenta destino.
+
+### Correcciones y estados especiales
+
+- Una entrega puede anularse o corregirse mientras el préstamo no tenga devoluciones. La operación debe revertir o ajustar su efecto financiero de forma coherente.
+- Un préstamo con devoluciones no se anula ni corrige de manera que rompa ese historial; primero debe respetarse la relación con sus devoluciones.
+- Marcar un préstamo como `INCOBRABLE` no restaura el saldo de la cuenta origen ni crea una devolución: reconoce que el dinero ya no se espera recuperar.
+- Un préstamo `INCOBRABLE` puede revertirse a `PENDIENTE` sin mutación financiera. La reversión solo cambia el estado y vuelve a incluir el saldo pendiente derivado en **Por cobrar**.
+- No se permite marcar como `INCOBRABLE` un préstamo `SALDADO`.
+
+### No-objetivos del primer slice
+
+No se incluyen intereses, cuotas, vencimientos, recordatorios, contactos, múltiples entregas asociadas al mismo préstamo ni patrimonio total. El módulo tampoco redefine el cálculo de patrimonio líquido ni convierte los préstamos en movimientos ordinarios de ingresos/gastos.
+
+## 8. Decisiones cerradas (04 jul 2026)
 
 | # | Decisión | Resolución |
 |---|---|---|
@@ -560,7 +611,7 @@ Esto no requiere cambios de schema — ya está soportado porque `Account` no ti
 
 ---
 
-## 8. Próximos pasos sugeridos
+## 9. Próximos pasos sugeridos
 
 1. Implementar auth + ownership (`User` + `userId`) antes de deploy público o acceso fuera de entorno local controlado.
 2. Preparar checklist de entrega V1 y cerrar deuda UX menor detectada en uso real.

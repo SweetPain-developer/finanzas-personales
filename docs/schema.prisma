@@ -1,6 +1,6 @@
 // Finanzas Personales — Prisma Schema
 // Generado: 04 de julio de 2026
-// Revisado: 11 de julio de 2026 — metas derivan progreso desde Account; compromisos recurrentes tienen único por plantilla/año/mes
+// Revisado: 16 de julio de 2026 — ownership y schema de préstamos por cobrar
 
 generator client {
   provider = "prisma-client-js"
@@ -9,6 +9,26 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  passwordHash        String
+  displayName         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  accounts            Account[]
+  categories          Category[]
+  transactions        Transaction[]
+  commitmentTemplates CommitmentTemplate[]
+  commitments         Commitment[]
+  goals               Goal[]
+  loans               Loan[]             @relation("UserLoans")
+  loanRepayments      LoanRepayment[]    @relation("UserLoanRepayments")
+
+  @@map("users")
 }
 
 // ─────────────────────────────────────────────
@@ -26,9 +46,13 @@ model Account {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+
   transacciones Transaction[]
   metas         Goal[]
 
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -45,13 +69,18 @@ enum AccountType {
 
 model Category {
   id            String       @id @default(cuid())
-  nombre        String       @unique
+  nombre        String
   icono         String       // nombre del ícono (ej: "car", "shopping-cart")
   tipo          CategoryType
   orden         Int          @default(0)
 
+  userId        String
+  user          User         @relation(fields: [userId], references: [id])
+
   transacciones Transaction[]
 
+  @@index([userId])
+  @@unique([userId, nombre])
   @@map("categories")
 }
 
@@ -73,6 +102,9 @@ model Transaction {
   notas           String?
 
   // Relaciones
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+
   accountId       String
   account         Account         @relation(fields: [accountId], references: [id])
 
@@ -85,13 +117,17 @@ model Transaction {
 
   // Vínculo opcional cuando la transacción fue creada al pagar un compromiso.
   commitmentPayment Commitment?    @relation("CommitmentPayment")
+  loanDelivery       Loan?          @relation("LoanDelivery")
+  loanRepayment      LoanRepayment? @relation("LoanRepaymentTransaction")
 
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  @@index([userId])
   @@index([accountId])
   @@index([fecha])
   @@index([transferId])
+  @@unique([id, userId])
   @@map("transactions")
 }
 
@@ -99,6 +135,62 @@ enum TransactionType {
   INGRESO       // plata que entra a la cuenta
   GASTO         // plata que sale de la cuenta
   TRANSFERENCIA // movimiento vinculado a otro (comparte transferId)
+}
+
+// ─────────────────────────────────────────────
+// PRÉSTAMOS POR COBRAR
+// ─────────────────────────────────────────────
+// Un Loan representa una entrega independiente a una persona. El saldo
+// pendiente se deriva de montoEntregado menos la suma de devoluciones.
+
+model Loan {
+  id                    String          @id @default(cuid())
+  persona               String
+  montoEntregado        Int             // siempre positivo; saldo pendiente es derivado
+  estado                LoanStatus      @default(PENDIENTE)
+  notas                 String?
+  entregaTransactionId  String          @unique
+  userId                String
+
+  user                  User            @relation("UserLoans", fields: [userId], references: [id], onDelete: Restrict)
+  entregaTransaction    Transaction     @relation("LoanDelivery", fields: [entregaTransactionId, userId], references: [id, userId], onDelete: Restrict)
+  devoluciones          LoanRepayment[]  @relation("LoanRepaymentLoan")
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([userId, estado])
+  @@unique([id, userId])
+  @@unique([entregaTransactionId, userId])
+  @@map("loans")
+}
+
+model LoanRepayment {
+  id              String      @id @default(cuid())
+  monto           Int         // siempre positivo; el saldo pendiente se calcula desde el historial
+  loanId          String
+  transactionId   String      @unique
+  userId          String
+
+  loan            Loan        @relation("LoanRepaymentLoan", fields: [loanId, userId], references: [id, userId], onDelete: Restrict)
+  transaction     Transaction @relation("LoanRepaymentTransaction", fields: [transactionId, userId], references: [id, userId], onDelete: Restrict)
+  user            User        @relation("UserLoanRepayments", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([userId, loanId])
+  @@index([loanId])
+  @@unique([transactionId, userId])
+  @@map("loan_repayments")
+}
+
+enum LoanStatus {
+  PENDIENTE
+  SALDADO
+  INCOBRABLE
 }
 
 // ─────────────────────────────────────────────
@@ -118,6 +210,9 @@ model Commitment {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+
   // Vínculo opcional a la plantilla recurrente que originó esta instancia.
   // Null para compromisos VARIABLE (luz, agua) o cargados manualmente sin plantilla.
   templateId      String?
@@ -127,6 +222,7 @@ model Commitment {
   paymentTransactionId String?      @unique
   paymentTransaction   Transaction? @relation("CommitmentPayment", fields: [paymentTransactionId], references: [id])
 
+  @@index([userId])
   @@index([mes, anio])
   @@index([templateId])
   @@unique([templateId, anio, mes])
@@ -152,8 +248,12 @@ model CommitmentTemplate {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+
   instancias     Commitment[]
 
+  @@index([userId])
   @@map("commitment_templates")
 }
 
@@ -184,9 +284,13 @@ model Goal {
   accountId       String
   account         Account    @relation(fields: [accountId], references: [id])
 
+  userId          String
+  user            User       @relation(fields: [userId], references: [id])
+
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
+  @@index([userId])
   @@map("goals")
 }
 

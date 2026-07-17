@@ -402,6 +402,18 @@ describe("updateMovement", () => {
     ).rejects.toThrow(MovementUpdateNotFoundError);
   });
 
+  it("rejects loan-linked edits outside the loan endpoint", async () => {
+    findFirstTransaction
+      .mockResolvedValueOnce(transaction({ id: "tx-loan", categoryId: null }))
+      .mockResolvedValueOnce({ ...transaction({ id: "tx-loan", categoryId: null }), loanDelivery: { id: "loan-1" }, loanRepayment: null });
+
+    await expect(updateMovement("tx-loan", {
+      tipo: "GASTO", monto: 1_000, accountId: "account-checking", categoryId: "category-food", fecha: "2026-07-06",
+    }, "user-demo")).rejects.toThrow(MovementUpdateConflictError);
+    expect(updateManyTransaction).not.toHaveBeenCalled();
+    expect(updateAccount).not.toHaveBeenCalled();
+  });
+
   it("does not update movements owned by another user", async () => {
     findFirstTransaction.mockResolvedValueOnce(null);
 

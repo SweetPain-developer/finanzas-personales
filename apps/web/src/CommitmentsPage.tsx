@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CommitmentGroup, CommitmentListItem, CommitmentTemplateListItem, CommitmentTemplatesData, CommitmentType, CommitmentsData } from "./commitmentTypes";
 import type { QuickEntryOptions } from "./QuickEntry";
+import { authenticatedFetch } from "./authClient";
 
 type CommitmentsPageState =
   | { status: "loading" }
@@ -189,8 +190,8 @@ export function CommitmentsPage({
 
     try {
       const [commitmentsResponse, templatesResponse] = await Promise.all([
-        fetch(buildCommitmentsEndpoint(month), { signal }),
-        fetch(COMMITMENT_TEMPLATES_ENDPOINT, { signal }),
+        authenticatedFetch(buildCommitmentsEndpoint(month), { signal }),
+        authenticatedFetch(COMMITMENT_TEMPLATES_ENDPOINT, { signal }),
       ]);
 
       if (!commitmentsResponse.ok) {
@@ -290,7 +291,7 @@ export function CommitmentsPage({
     setPaymentDraft({ status: "loading", commitment });
 
     try {
-      const response = await fetch(QUICK_ENTRY_OPTIONS_ENDPOINT);
+      const response = await authenticatedFetch(QUICK_ENTRY_OPTIONS_ENDPOINT);
 
       if (!response.ok) {
         throw new Error(`Payment options request failed with status ${response.status}.`);
@@ -326,7 +327,7 @@ export function CommitmentsPage({
     setState({ ...state, templateError: undefined, templateNotice: undefined, togglingTemplateId: template.id });
 
     try {
-      const response = await fetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${template.id}`, {
+      const response = await authenticatedFetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${template.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ activa: !template.activa }),
@@ -369,7 +370,7 @@ export function CommitmentsPage({
     setCreateTemplateDraft({ ...currentDraft, error: undefined });
 
     try {
-      const response = await fetch(COMMITMENT_TEMPLATES_ENDPOINT, {
+      const response = await authenticatedFetch(COMMITMENT_TEMPLATES_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildTemplatePayload(currentDraft)),
@@ -414,7 +415,7 @@ export function CommitmentsPage({
     setEditTemplateDraft({ ...currentDraft, error: undefined });
 
     try {
-      const response = await fetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${currentDraft.id}`, {
+      const response = await authenticatedFetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${currentDraft.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildTemplatePayload(currentDraft)),
@@ -467,7 +468,7 @@ export function CommitmentsPage({
     setState({ ...state, templateError: undefined, templateNotice: undefined, deletingTemplateId: template.id });
 
     try {
-      const response = await fetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${template.id}`, { method: "DELETE" });
+      const response = await authenticatedFetch(`${COMMITMENT_TEMPLATES_ENDPOINT}/${template.id}`, { method: "DELETE" });
 
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -516,7 +517,7 @@ export function CommitmentsPage({
     setPaymentDraft({ ...currentDraft, submitError: undefined });
 
     try {
-      const response = await fetch(`/api/commitments/${currentDraft.commitment.id}/pay`, {
+      const response = await authenticatedFetch(`/api/commitments/${currentDraft.commitment.id}/pay`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountId: currentDraft.accountId, categoryId: currentDraft.categoryId }),
@@ -550,7 +551,7 @@ export function CommitmentsPage({
     setState({ ...state, actionError: undefined, revertingCommitmentId: commitment.id });
 
     try {
-      const response = await fetch(`/api/commitments/${commitment.id}/unpay`, { method: "PATCH" });
+      const response = await authenticatedFetch(`/api/commitments/${commitment.id}/unpay`, { method: "PATCH" });
 
       if (!response.ok) {
         throw new Error(`Revert commitment payment request failed with status ${response.status}.`);
@@ -577,7 +578,7 @@ export function CommitmentsPage({
     setEditDraft({ ...currentDraft, error: undefined });
 
     try {
-      const response = await fetch(`/api/commitments/${currentDraft.id}`, {
+      const response = await authenticatedFetch(`/api/commitments/${currentDraft.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildCommitmentPayload(currentDraft, selectedMonth)),
@@ -611,7 +612,7 @@ export function CommitmentsPage({
     setCreateDraft({ ...currentDraft, error: undefined });
 
     try {
-      const response = await fetch(CREATE_COMMITMENT_ENDPOINT, {
+      const response = await authenticatedFetch(CREATE_COMMITMENT_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildCreateCommitmentPayload(currentDraft, selectedMonth)),
@@ -652,7 +653,7 @@ export function CommitmentsPage({
     setState({ ...state, actionError: undefined, deletingCommitmentId: commitment.id });
 
     try {
-      const response = await fetch(`/api/commitments/${commitment.id}`, { method: "DELETE" });
+      const response = await authenticatedFetch(`/api/commitments/${commitment.id}`, { method: "DELETE" });
 
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;

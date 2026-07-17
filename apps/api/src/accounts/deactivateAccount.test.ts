@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 import { prisma } from "../prisma.js";
-import { AccountDeactivateNotFoundError, deactivateAccount } from "./deactivateAccount.js";
+import { AccountDeactivateNotFoundError, LoanAccountConflictError, deactivateAccount } from "./deactivateAccount.js";
 
 vi.mock("../prisma.js", () => ({
   prisma: {
@@ -9,16 +9,20 @@ vi.mock("../prisma.js", () => ({
       updateMany: vi.fn(),
       findFirstOrThrow: vi.fn(),
     },
+    transaction: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
 
 const updateManyMock = prisma.account.updateMany as Mock;
 const findFirstOrThrowMock = prisma.account.findFirstOrThrow as Mock;
+const findLoanTransactionMock = prisma.transaction.findFirst as Mock;
 
 describe("deactivateAccount", () => {
   beforeEach(() => {
     updateManyMock.mockReset();
     findFirstOrThrowMock.mockReset();
+    findLoanTransactionMock.mockReset();
+    findLoanTransactionMock.mockResolvedValue(null);
   });
 
   it("deactivates an existing account", async () => {
@@ -104,5 +108,12 @@ describe("deactivateAccount", () => {
       data: { activa: false },
     });
     expect(findFirstOrThrowMock).not.toHaveBeenCalled();
+  });
+
+  it("does not deactivate an account referenced by loan delivery or repayment", async () => {
+    findLoanTransactionMock.mockResolvedValueOnce({ id: "loan-repayment-tx" });
+
+    await expect(deactivateAccount("account-demo-primary", "user-demo")).rejects.toBeInstanceOf(LoanAccountConflictError);
+    expect(updateManyMock).not.toHaveBeenCalled();
   });
 });

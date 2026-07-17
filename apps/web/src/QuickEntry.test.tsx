@@ -9,6 +9,8 @@ import type { QuickEntryOptions } from "./QuickEntry";
 const dashboardData: DashboardData = {
   currentMonthLabel: "Julio 2026",
   availableToSpend: 345000,
+  operativeBalance: 500000,
+  pendingCommitmentsTotal: 155000,
   liquidNetWorth: 1250000,
   liquidNetWorthVariation: 50000,
   monthlyIncome: 123456,
@@ -48,6 +50,7 @@ describe("QuickEntryPage", () => {
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
         return Promise.resolve(jsonResponse(url.includes("quick-entry") ? quickEntryOptions : dashboardData));
       }),
     );
@@ -83,7 +86,7 @@ describe("QuickEntryPage", () => {
     render(<QuickEntryPage onClose={vi.fn()} />);
 
     expect(await screen.findByRole("button", { name: "Guardar" })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/quick-entry/options", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("/api/quick-entry/options", expect.objectContaining({ credentials: "include" }));
     expect(screen.getByRole("button", { name: "Gasto" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Cuenta principal demo" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -118,6 +121,44 @@ describe("QuickEntryPage", () => {
     expect(await screen.findByRole("button", { name: "Transferencia enviada" })).toBeInTheDocument();
   });
 
+  it("selects Préstamo and routes each loan action to the matching flow", async () => {
+    const onLoanAction = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(quickEntryOptions))));
+
+    render(<QuickEntryPage onClose={vi.fn()} onLoanAction={onLoanAction} />);
+    await screen.findByRole("button", { name: "Guardar" });
+    fireEvent.click(screen.getByRole("button", { name: "Préstamo" }));
+    expect(screen.getByRole("button", { name: "Préstamo" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Un préstamo no es gasto ni ingreso.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Entregar préstamo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Registrar devolución/ }));
+    expect(onLoanAction).toHaveBeenNthCalledWith(1, "create");
+    expect(onLoanAction).toHaveBeenNthCalledWith(2, "repay");
+  });
+
+  it("preserves App navigation when QuickEntry opens a loan flow and returns to Dashboard", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
+      if (url === "/api/quick-entry/options") return Promise.resolve(jsonResponse(quickEntryOptions));
+      if (url === "/api/dashboard?month=2026-07") return Promise.resolve(jsonResponse(dashboardData));
+      if (url === "/api/loans") return Promise.resolve(jsonResponse({ loans: [], summary: { pendingLoansTotal: 0, pendingLoansCount: 0 } }));
+      if (url === "/api/accounts") return Promise.resolve(jsonResponse({ groups: [{ accounts: [] }], inactive: [] }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Agregar movimiento" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Préstamo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Entregar préstamo" }));
+    expect(await screen.findByRole("heading", { name: "Nuevo préstamo" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Dashboard" }));
+    expect(await screen.findByText("Julio 2026")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([input]) => String(input) === "/api/dashboard?month=2026-07").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("requires amount, account, and category before saving GASTO or INGRESO", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(quickEntryOptions))));
 
@@ -145,6 +186,8 @@ describe("QuickEntryPage", () => {
     const refreshedDashboardData: DashboardData = {
       ...dashboardData,
       availableToSpend: 332500,
+      operativeBalance: 487500,
+      pendingCommitmentsTotal: 155000,
       recentTransactions: [
         {
           id: "transaction-new",
@@ -163,6 +206,7 @@ describe("QuickEntryPage", () => {
     };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
 
       if (url === "/api/dashboard?month=2026-07") {
         const dashboardCalls = fetchMock.mock.calls.filter(([calledInput]) => String(calledInput) === url).length;

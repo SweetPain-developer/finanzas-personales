@@ -19,6 +19,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 | `docs/estructura_proyecto_finanzas_personales.md` | Haya dudas de dónde va un archivo nuevo, o de por qué la estructura es la que es (y por qué no es la de `juego-cartas`) |
 | `docs/schema.prisma` | Se esté escribiendo cualquier query o mutación — es la única fuente de verdad del modelo de datos, no se infiere de memoria |
 | `docs/mockups/*.jsx` + `docs/mockups/README.md` | Se necesite ver el comportamiento de interacción ya validado de una pantalla, antes de reimplementarla en `apps/web/src` |
+| `harness_prestamos_por_cobrar.md` | Se vaya a diseñar o implementar el módulo de Préstamos por cobrar; contiene sus decisiones cerradas, reglas contables, fases y protocolo de implementación |
 | `docs/importacion/README.md` | Haya que importar o revisar datos reales locales con el flujo controlado y sus advertencias |
 | `docs/diseno_auth_ownership_finanzas_personales.md` | Se vaya a implementar autenticación, ownership por `userId`, deploy público o aislamiento de datos |
 

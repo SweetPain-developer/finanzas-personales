@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 
 import type { AccountListItem, AccountsData } from "./accountTypes";
 import type { GoalEditorValues, GoalGroup, GoalListItem, GoalsData, GoalStatus } from "./goalTypes";
+import { authenticatedFetch } from "./authClient";
 
 type GoalsPageState =
   | { status: "loading" }
@@ -37,8 +38,8 @@ export function GoalsPage({ onQuickEntry, onNavigateDashboard, onNavigateMovemen
 
     try {
       const [goalsResponse, accountsResponse] = await Promise.all([
-        fetch(GOALS_ENDPOINT, { signal }),
-        fetch(ACCOUNTS_ENDPOINT, { signal }),
+        authenticatedFetch(GOALS_ENDPOINT, { signal }),
+        authenticatedFetch(ACCOUNTS_ENDPOINT, { signal }),
       ]);
 
       if (!goalsResponse.ok) {
@@ -80,7 +81,7 @@ export function GoalsPage({ onQuickEntry, onNavigateDashboard, onNavigateMovemen
   }, [loadGoals]);
 
   async function handleCreateGoal(values: GoalEditorValues) {
-    const response = await fetch(GOALS_ENDPOINT, {
+    const response = await authenticatedFetch(GOALS_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(values),
@@ -92,7 +93,7 @@ export function GoalsPage({ onQuickEntry, onNavigateDashboard, onNavigateMovemen
   }
 
   async function handleUpdateGoal(goalId: string, values: GoalEditorValues) {
-    const response = await fetch(`${GOALS_ENDPOINT}/${goalId}`, {
+    const response = await authenticatedFetch(`${GOALS_ENDPOINT}/${goalId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(values),
@@ -123,7 +124,7 @@ export function GoalsPage({ onQuickEntry, onNavigateDashboard, onNavigateMovemen
     setFeedbackError(null);
 
     try {
-      const response = await fetch(`${GOALS_ENDPOINT}/${goal.id}`, { method: "DELETE" });
+      const response = await authenticatedFetch(`${GOALS_ENDPOINT}/${goal.id}`, { method: "DELETE" });
 
       if (!response.ok) {
         throw new Error(`Goal delete failed with status ${response.status}.`);
@@ -154,7 +155,7 @@ export function GoalsPage({ onQuickEntry, onNavigateDashboard, onNavigateMovemen
     setFeedbackError(null);
 
     try {
-      const response = await fetch(`${GOALS_ENDPOINT}/${goal.id}/status`, {
+      const response = await authenticatedFetch(`${GOALS_ENDPOINT}/${goal.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),

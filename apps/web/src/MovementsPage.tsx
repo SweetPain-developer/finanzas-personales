@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import type { Movement, MovementsData } from "./movementTypes";
+import { authenticatedFetch } from "./authClient";
 
 type MovementsPageState =
   | { status: "loading" }
@@ -81,7 +82,7 @@ export function MovementsPage({ onQuickEntry, onNavigateDashboard, onNavigateAcc
       setState({ status: "loading" });
 
       try {
-        const response = await fetch(buildMovementsEndpoint(filters), { signal: abortController.signal });
+        const response = await authenticatedFetch(buildMovementsEndpoint(filters), { signal: abortController.signal });
 
         if (!response.ok) {
           throw new Error(`Movements request failed with status ${response.status}.`);
@@ -308,7 +309,7 @@ function MovementDetail({ movement, data, onClose, onSaved, onDeleted }: { movem
     setDeleteStatus({ tone: "info", message: "Eliminando movimiento..." });
 
     try {
-      const response = await fetch(`/api/movements/${movement.id}`, { method: "DELETE" });
+      const response = await authenticatedFetch(`/api/movements/${movement.id}`, { method: "DELETE" });
 
       if (!response.ok) {
         throw new Error(`Movement delete failed with status ${response.status}.`);
@@ -405,7 +406,7 @@ function MovementEditForm({ movement, data, onCancel, onSaved }: { movement: Exc
     setStatus({ tone: "info", message: "Guardando movimiento..." });
 
     try {
-      const response = await fetch(`/api/movements/${movement.id}`, {
+      const response = await authenticatedFetch(`/api/movements/${movement.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo, monto: Number(monto), fecha, descripcion, accountId, categoryId }),
@@ -498,7 +499,7 @@ function TransferEditForm({ movement, data, onCancel, onSaved }: { movement: Ext
     setStatus({ tone: "info", message: "Guardando transferencia..." });
 
     try {
-      const response = await fetch(`/api/movements/${movement.id}`, {
+      const response = await authenticatedFetch(`/api/movements/${movement.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo: "TRANSFERENCIA", monto: Number(monto), fecha, descripcion, fromAccountId, toAccountId }),

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Dashboard } from "./Dashboard";
 import type { DashboardData } from "./dashboardTypes";
+import { authenticatedFetch } from "./authClient";
 
 type DashboardPageState =
   | { status: "loading" }
@@ -16,10 +17,11 @@ type DashboardPageProps = {
   onNavigateAccounts?: () => void;
   onNavigateGoals?: () => void;
   onNavigateCommitments?: () => void;
+  onNavigateLoans?: () => void;
   refreshKey?: number;
 };
 
-export function DashboardPage({ onQuickEntry, onNavigateMovements, onNavigateAccounts, onNavigateGoals, onNavigateCommitments, refreshKey = 0 }: DashboardPageProps) {
+export function DashboardPage({ onQuickEntry, onNavigateMovements, onNavigateAccounts, onNavigateGoals, onNavigateCommitments, onNavigateLoans, refreshKey = 0 }: DashboardPageProps) {
   const [state, setState] = useState<DashboardPageState>({ status: "loading" });
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export function DashboardPage({ onQuickEntry, onNavigateMovements, onNavigateAcc
 
     async function loadDashboardData() {
       try {
-        const response = await fetch(DASHBOARD_ENDPOINT, { signal: abortController.signal });
+        const response = await authenticatedFetch(DASHBOARD_ENDPOINT, { signal: abortController.signal });
 
         if (!response.ok) {
           throw new Error(`No se pudo cargar el dashboard. Código ${response.status}.`);
@@ -68,6 +70,7 @@ export function DashboardPage({ onQuickEntry, onNavigateMovements, onNavigateAcc
       onNavigateAccounts={onNavigateAccounts}
       onNavigateGoals={onNavigateGoals}
       onNavigateCommitments={onNavigateCommitments}
+      onNavigateLoans={onNavigateLoans}
     />
   );
 }

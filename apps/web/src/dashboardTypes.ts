@@ -25,10 +25,14 @@ export type DashboardTransaction = Omit<
 export type DashboardData = {
   currentMonthLabel: string;
   availableToSpend: number;
+  operativeBalance: number;
+  pendingCommitmentsTotal: number;
   liquidNetWorth: number;
   liquidNetWorthVariation: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   goals: DashboardGoal[];
   recentTransactions: DashboardTransaction[];
+  pendingLoansTotal?: number;
+  pendingLoansCount?: number;
 };

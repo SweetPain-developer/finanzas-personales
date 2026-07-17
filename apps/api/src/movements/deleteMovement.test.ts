@@ -91,6 +91,15 @@ describe("deleteMovement", () => {
     expect(updateAccount).not.toHaveBeenCalled();
   });
 
+  it("rejects loan-linked deletes outside the loan endpoint", async () => {
+    const linked = { ...transaction({ id: "tx-loan", categoryId: null }), loanDelivery: { id: "loan-1" }, loanRepayment: null };
+    findFirstTransaction.mockResolvedValueOnce(linked);
+
+    await expect(deleteMovement("tx-loan", "user-demo")).rejects.toThrow(MovementDeleteConflictError);
+    expect(deleteManyTransaction).not.toHaveBeenCalled();
+    expect(updateAccount).not.toHaveBeenCalled();
+  });
+
   it("deletes a transfer pair from a transaction row id and reverses both account balances", async () => {
     const salida = transaction({ id: "tx-transfer-out", tipo: TransactionType.GASTO, monto: 10_000, accountId: "account-origin", categoryId: null, transferId: "transfer-1" });
     const entrada = transaction({ id: "tx-transfer-in", tipo: TransactionType.INGRESO, monto: 10_000, accountId: "account-destination", categoryId: null, transferId: "transfer-1" });

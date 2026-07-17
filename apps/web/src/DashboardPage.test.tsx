@@ -8,6 +8,8 @@ import type { DashboardData } from "./dashboardTypes";
 const dashboardData: DashboardData = {
   currentMonthLabel: "Julio 2026",
   availableToSpend: 345000,
+  operativeBalance: 500000,
+  pendingCommitmentsTotal: 155000,
   liquidNetWorth: 1250000,
   liquidNetWorthVariation: 50000,
   monthlyIncome: 1200000,
@@ -49,6 +51,8 @@ const dashboardData: DashboardData = {
       },
     },
   ],
+  pendingLoansTotal: 90000,
+  pendingLoansCount: 2,
 };
 
 afterEach(() => {
@@ -71,7 +75,7 @@ describe("DashboardPage", () => {
 
     render(<DashboardPage />);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/dashboard?month=2026-07", expect.any(Object)));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/dashboard?month=2026-07", expect.objectContaining({ credentials: "include" })));
   });
 
   it("renders an error when the dashboard request fails", async () => {
@@ -94,11 +98,57 @@ describe("DashboardPage", () => {
     expect(screen.getByText("01 jul · Checking")).toBeInTheDocument();
   });
 
+  it("renders the Por cobrar card with count and total and navigates to Loans without changing other metrics", () => {
+    const onNavigateLoans = vi.fn();
+    render(<Dashboard data={dashboardData} onNavigateLoans={onNavigateLoans} />);
+
+    const loansCard = screen.getByRole("button", { name: /Por cobrar/ });
+    expect(within(loansCard).getByText("$90.000 por cobrar")).toBeInTheDocument();
+    expect(within(loansCard).getByText("2 préstamos pendientes")).toBeInTheDocument();
+    expect(screen.getByText("$345.000")).toBeInTheDocument();
+    expect(screen.getByText("$500.000")).toBeInTheDocument();
+    expect(screen.getByText("$1.250.000")).toBeInTheDocument();
+    fireEvent.click(loansCard);
+    expect(onNavigateLoans).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders $0 and the empty loan state while preserving the other dashboard metrics", () => {
+    render(<Dashboard data={{ ...dashboardData, pendingLoansTotal: 0, pendingLoansCount: 0 }} />);
+
+    const loansCard = screen.getByRole("button", { name: /Por cobrar/ });
+    expect(within(loansCard).getByText("$0 por cobrar")).toBeInTheDocument();
+    expect(within(loansCard).getByText("Sin préstamos pendientes")).toBeInTheDocument();
+    expect(screen.getByText("$855.000")).toBeInTheDocument();
+    expect(screen.getByText("$1.200.000")).toBeInTheDocument();
+    expect(screen.getByText("$1.250.000")).toBeInTheDocument();
+  });
+
+  it("renders the operational estimate breakdown and keeps the final calculation consistent", () => {
+    render(<Dashboard data={dashboardData} />);
+
+    const estimateCard = screen.getByText("Disponible operativo estimado").closest<HTMLElement>(".dashboard-card")!;
+
+    expect(within(estimateCard).getByText("Después de reservar compromisos pendientes")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("Saldo operativo − compromisos pendientes = disponible operativo estimado")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("Saldo operativo")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("$500.000")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("Compromisos pendientes")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("$155.000")).toBeInTheDocument();
+    expect(within(estimateCard).getByText("$345.000")).toBeInTheDocument();
+  });
+
   it("renders zero net worth variation without a plus sign", () => {
     render(<Dashboard data={{ ...dashboardData, liquidNetWorthVariation: 0 }} />);
 
     expect(screen.getByText("$0")).toBeInTheDocument();
     expect(screen.queryByText("+$0")).not.toBeInTheDocument();
+  });
+
+  it("marks the Dashboard bottom navigation item as the current page", () => {
+    render(<Dashboard data={dashboardData} />);
+
+    expect(screen.getByRole("button", { name: "Dash" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Mov" })).not.toHaveAttribute("aria-current");
   });
 
   it("renders a transfer recent movement without income or expense sign", () => {

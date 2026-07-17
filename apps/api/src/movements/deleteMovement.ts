@@ -3,7 +3,7 @@ import { TransactionType, type Prisma, type Transaction } from "@prisma/client";
 import { prisma } from "../prisma.js";
 
 type OwnedTransactionOperations = {
-  findFirst(args: { where: { id: string; userId: string } }): Promise<Transaction | null>;
+  findFirst(args: { where: { id: string; userId: string }; include?: { loanDelivery: boolean; loanRepayment: boolean } }): Promise<(Transaction & { loanDelivery?: unknown; loanRepayment?: unknown }) | null>;
   findMany(args: { where: { transferId: string; userId: string }; orderBy: { tipo: "asc" } }): Promise<Transaction[]>;
   deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>;
 };
@@ -34,12 +34,19 @@ export async function deleteMovement(id: string, userId: string): Promise<void> 
   try {
     await prisma.$transaction(async (tx) => {
       const transactionOperations = tx.transaction as unknown as OwnedTransactionOperations;
-      const existing = await transactionOperations.findFirst({ where: { id, userId } });
+       const existing = await transactionOperations.findFirst({ where: { id, userId } });
 
-      if (!existing) {
+       if (!existing) {
         await deleteTransferMovement(tx, id, null, userId);
         return;
-      }
+       }
+
+       const linked = existing.categoryId === null
+         ? await transactionOperations.findFirst({ where: { id, userId }, include: { loanDelivery: true, loanRepayment: true } })
+         : existing;
+       if (linked?.loanDelivery || linked?.loanRepayment) {
+         throw new MovementDeleteConflictError("Loan-linked transactions must be deleted through the loan endpoint.");
+       }
 
       if (existing.tipo === TransactionType.TRANSFERENCIA || existing.transferId !== null || existing.categoryId === null) {
         if (existing.transferId === null) {

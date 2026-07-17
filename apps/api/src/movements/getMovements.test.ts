@@ -113,6 +113,23 @@ describe("getMovements", () => {
     ]);
   });
 
+  it("classifies loan delivery and repayment without treating them as transfers", async () => {
+    mockFilters();
+    findManyTransactions.mockResolvedValueOnce([
+      transaction({ id: "tx-loan-delivery", tipo: TransactionType.GASTO, categoryId: null, transferId: null, loanDelivery: { id: "loan-1" }, loanRepayment: null } as any),
+      transaction({ id: "tx-loan-repayment", tipo: TransactionType.INGRESO, categoryId: null, transferId: null, loanDelivery: null, loanRepayment: { id: "repayment-1", loanId: "loan-1" } } as any),
+    ]);
+
+    const result = await getMovements("user-demo", { month: "2026-07" });
+    const movements = result.groups.flatMap((group) => group.movements);
+
+    expect(movements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "tx-loan-delivery", classification: "LOAN_DELIVERY", loanId: "loan-1" }),
+      expect.objectContaining({ id: "tx-loan-repayment", classification: "LOAN_REPAYMENT", loanId: "loan-1" }),
+    ]));
+    expect(movements.every((movement) => movement.tipo !== "TRANSFERENCIA")).toBe(true);
+  });
+
   it("includes a transfer in the account filter when either side matches", async () => {
     mockFilters();
     findManyTransactions.mockResolvedValueOnce([

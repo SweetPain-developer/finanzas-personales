@@ -27,6 +27,7 @@ import { getMovements, MovementValidationError } from "./movements/getMovements.
 import { MovementUpdateConflictError, MovementUpdateNotFoundError, MovementUpdateValidationError, updateMovement } from "./movements/updateMovement.js";
 import { getQuickEntryOptions } from "./quick-entry/getQuickEntryOptions.js";
 import { createTransaction, TransactionValidationError } from "./transactions/createTransaction.js";
+import { createLoan, deleteLoan, getLoanById, getLoans, LoanConflictError, LoanNotFoundError, LoanValidationError, repayLoan, updateLoan, updateLoanStatus } from "./loans/loans.js";
 
 vi.mock("./dashboard/getDashboardData.js", () => ({
   getDashboardData: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock("./accounts/deactivateAccount.js", () => ({
 
 vi.mock("./accounts/updateAccount.js", () => ({
   AccountUpdateNotFoundError: class AccountUpdateNotFoundError extends Error {},
+  LoanAccountConflictError: class LoanAccountConflictError extends Error {},
   updateAccount: vi.fn(),
 }));
 
@@ -154,6 +156,19 @@ vi.mock("./transactions/createTransaction.js", () => ({
   createTransaction: vi.fn(),
 }));
 
+vi.mock("./loans/loans.js", () => ({
+  LoanConflictError: class LoanConflictError extends Error {},
+  LoanNotFoundError: class LoanNotFoundError extends Error {},
+  LoanValidationError: class LoanValidationError extends Error {},
+  createLoan: vi.fn(),
+  deleteLoan: vi.fn(),
+  getLoanById: vi.fn(),
+  getLoans: vi.fn(),
+  repayLoan: vi.fn(),
+  updateLoan: vi.fn(),
+  updateLoanStatus: vi.fn(),
+}));
+
 vi.mock("./prisma.js", () => ({
   prisma: {
     user: {
@@ -190,6 +205,13 @@ const mockedDeleteMovement = vi.mocked(deleteMovement);
 const mockedUpdateMovement = vi.mocked(updateMovement);
 const mockedGetQuickEntryOptions = vi.mocked(getQuickEntryOptions);
 const mockedCreateTransaction = vi.mocked(createTransaction);
+const mockedCreateLoan = vi.mocked(createLoan);
+const mockedDeleteLoan = vi.mocked(deleteLoan);
+const mockedGetLoanById = vi.mocked(getLoanById);
+const mockedGetLoans = vi.mocked(getLoans);
+const mockedRepayLoan = vi.mocked(repayLoan);
+const mockedUpdateLoan = vi.mocked(updateLoan);
+const mockedUpdateLoanStatus = vi.mocked(updateLoanStatus);
 
 process.env.AUTH_JWT_SECRET = "test-secret-with-enough-entropy";
 process.env.AUTH_COOKIE_SECURE = "false";
@@ -1537,6 +1559,108 @@ describe("POST /transactions", () => {
     expect(mockedCreateTransaction).not.toHaveBeenCalled();
   });
 });
+
+describe("loans HTTP contract", () => {
+  beforeEach(() => {
+    mockedCreateLoan.mockReset();
+    mockedDeleteLoan.mockReset();
+    mockedGetLoanById.mockReset();
+    mockedGetLoans.mockReset();
+    mockedRepayLoan.mockReset();
+    mockedUpdateLoan.mockReset();
+    mockedUpdateLoanStatus.mockReset();
+  });
+
+  it("creates a loan without accepting a client userId and returns the loan", async () => {
+    const payload = { persona: "Ana", montoEntregado: 20_000, accountId: "account-checking", userId: "attacker" };
+    mockedCreateLoan.mockResolvedValueOnce(loanResponse());
+
+    const response = await request(app).post("/loans").set("Cookie", authCookie).send(payload).expect(201);
+
+    expect(response.body.loan).toMatchObject({ id: "loan-1", persona: "Ana", estado: "PENDIENTE", saldoPendiente: 20_000 });
+    expect(mockedCreateLoan).toHaveBeenCalledWith(payload, "user-demo");
+  });
+
+  it("lists loans with a pending-only summary and supports the status filter", async () => {
+    const result = { loans: [loanResponse()], summary: { pendingLoansTotal: 20_000, pendingLoansCount: 1 } };
+    mockedGetLoans.mockResolvedValueOnce(result);
+
+    const response = await request(app).get("/loans?estado=PENDIENTE").set("Cookie", authCookie).expect(200);
+
+    expect(response.body).toEqual(result);
+    expect(mockedGetLoans).toHaveBeenCalledWith("user-demo", "PENDIENTE");
+  });
+
+  it.each(["/loans", "/loans/loan-1", "/loans/loan-1/repayments", "/loans/loan-1/status"]) (
+    "rejects unauthenticated %s requests with 401",
+    async (path) => {
+      const response = path.endsWith("repayments")
+        ? await request(app).post(path).send({ monto: 1, accountId: "account" })
+        : path.endsWith("status")
+          ? await request(app).patch(path).send({ estado: "INCOBRABLE" })
+          : path === "/loans"
+            ? await request(app).get(path)
+            : await request(app).get(path);
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: "Authentication required." });
+    },
+  );
+
+  it("maps malformed creation and invalid list filters to 400", async () => {
+    mockedCreateLoan.mockRejectedValueOnce(new LoanValidationError("persona is required."));
+    const body = await request(app).post("/loans").set("Cookie", authCookie).send({ persona: "", montoEntregado: 0 }).expect(400);
+    expect(body.body).toEqual({ error: "persona is required." });
+    const filter = await request(app).get("/loans?estado=INVALIDO").set("Cookie", authCookie).expect(400);
+    expect(filter.body).toEqual({ error: "Invalid loan status." });
+  });
+
+  it("maps not found and conflict errors for detail, repayment, edit, status, and delete", async () => {
+    mockedGetLoanById.mockRejectedValueOnce(new LoanNotFoundError("Loan not found."));
+    expect((await request(app).get("/loans/missing").set("Cookie", authCookie)).status).toBe(404);
+
+    mockedRepayLoan.mockRejectedValueOnce(new LoanConflictError("Only pending loans can receive repayments."));
+    expect((await request(app).post("/loans/loan-1/repayments").set("Cookie", authCookie).send({ monto: 1, accountId: "account" })).status).toBe(409);
+
+    mockedUpdateLoan.mockRejectedValueOnce(new LoanConflictError("Loans with repayments cannot be edited."));
+    expect((await request(app).patch("/loans/loan-1").set("Cookie", authCookie).send({ persona: "Nueva" })).status).toBe(409);
+
+    mockedUpdateLoanStatus.mockRejectedValueOnce(new LoanValidationError("Invalid loan status."));
+    expect((await request(app).patch("/loans/loan-1/status").set("Cookie", authCookie).send({ estado: "INVALIDO" })).status).toBe(400);
+
+    mockedDeleteLoan.mockRejectedValueOnce(new LoanNotFoundError("Loan not found."));
+    expect((await request(app).delete("/loans/missing").set("Cookie", authCookie)).status).toBe(404);
+  });
+
+  it("returns the minimum detail, repayment, edit, status, and delete responses", async () => {
+    const loan = loanResponse({ saldoPendiente: 10_000 });
+    mockedGetLoanById.mockResolvedValueOnce(loan);
+    mockedRepayLoan.mockResolvedValueOnce({ id: "repayment-1", monto: 10_000 });
+    mockedUpdateLoan.mockResolvedValueOnce(loan);
+    mockedUpdateLoanStatus.mockResolvedValueOnce(loan);
+    mockedDeleteLoan.mockResolvedValueOnce(undefined);
+
+    expect((await request(app).get("/loans/loan-1").set("Cookie", authCookie)).body).toEqual({ loan });
+    expect((await request(app).post("/loans/loan-1/repayments").set("Cookie", authCookie).send({ monto: 10_000, accountId: "account" })).body).toEqual({ repayment: { id: "repayment-1", monto: 10_000 } });
+    expect((await request(app).patch("/loans/loan-1").set("Cookie", authCookie).send({ persona: "Ana nueva" })).body).toEqual({ loan });
+    expect((await request(app).patch("/loans/loan-1/status").set("Cookie", authCookie).send({ estado: "INCOBRABLE" })).body).toEqual({ loan });
+    expect((await request(app).delete("/loans/loan-1").set("Cookie", authCookie)).status).toBe(204);
+  });
+});
+
+function loanResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "loan-1",
+    persona: "Ana",
+    montoEntregado: 20_000,
+    estado: "PENDIENTE",
+    notas: null,
+    fechaEntrega: "2026-07-16T00:00:00.000Z",
+    cuentaEntrega: { id: "account-checking", nombre: "Checking", tipo: "OPERATIVA" },
+    saldoPendiente: 20_000,
+    devoluciones: [],
+    ...overrides,
+  };
+}
 
 function goalResponse(overrides: Partial<{
   id: string;

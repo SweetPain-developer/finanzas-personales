@@ -11,6 +11,8 @@ import type { QuickEntryOptions } from "./QuickEntry";
 const dashboardData: DashboardData = {
   currentMonthLabel: "Julio 2026",
   availableToSpend: 345000,
+  operativeBalance: 500000,
+  pendingCommitmentsTotal: 155000,
   liquidNetWorth: 1250000,
   liquidNetWorthVariation: 50000,
   monthlyIncome: 1200000,
@@ -108,6 +110,7 @@ describe("CommitmentsPage", () => {
   it("opens from the dashboard bottom nav Compr item and renders commitments", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
+      if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
 
       if (url.includes("commitments")) {
         return Promise.resolve(jsonResponse(commitmentsData));
@@ -129,7 +132,7 @@ describe("CommitmentsPage", () => {
     expect(screen.getByText("Arriendo")).toBeInTheDocument();
     expect(screen.getByText("Vence día 5")).toBeInTheDocument();
     expect(screen.getByText("Plan celular")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/commitments?month=2026-07", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("/api/commitments?month=2026-07", expect.objectContaining({ credentials: "include" }));
   });
 
   it("renders loading while commitments load", () => {
@@ -839,6 +842,7 @@ describe("CommitmentsPage", () => {
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === "/api/auth/session") return Promise.resolve(jsonResponse({ user: { id: "user-1", email: "user@example.com" } }));
 
         if (url.includes("commitments")) {
           return Promise.resolve(jsonResponse(commitmentsData));

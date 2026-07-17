@@ -6,7 +6,7 @@ import { requireAuth } from "./auth/middleware.js";
 import { AuthenticationError, clearAuthCookie, createSessionToken, loginWithPassword, resolveCurrentUser, setAuthCookie } from "./auth/session.js";
 import { getAccounts } from "./accounts/getAccounts.js";
 import { createAccount } from "./accounts/createAccount.js";
-import { AccountUpdateNotFoundError, updateAccount } from "./accounts/updateAccount.js";
+import { AccountUpdateNotFoundError, LoanAccountConflictError, updateAccount } from "./accounts/updateAccount.js";
 import { AccountDeleteConflictError, AccountDeleteNotFoundError, deleteAccount } from "./accounts/deleteAccount.js";
 import { AccountReactivateNotFoundError, reactivateAccount } from "./accounts/reactivateAccount.js";
 import { AccountDeactivateNotFoundError, deactivateAccount } from "./accounts/deactivateAccount.js";
@@ -31,6 +31,7 @@ import { getMovements, MovementValidationError } from "./movements/getMovements.
 import { MovementUpdateConflictError, MovementUpdateNotFoundError, MovementUpdateValidationError, updateMovement } from "./movements/updateMovement.js";
 import { getQuickEntryOptions } from "./quick-entry/getQuickEntryOptions.js";
 import { createTransaction, TransactionValidationError } from "./transactions/createTransaction.js";
+import { deleteLoan, getLoanById, getLoans, LoanConflictError, LoanNotFoundError, LoanValidationError, createLoan, repayLoan, updateLoan, updateLoanStatus } from "./loans/loans.js";
 
 const app = express();
 
@@ -373,6 +374,35 @@ app.post("/transactions", requireAuth, async (request, response, next) => {
   }
 });
 
+app.get("/loans", requireAuth, async (request, response, next) => {
+  try {
+    const queryError = validateSingleValueQuery(request.query, ["estado"]);
+    if (queryError) { response.status(400).json({ error: queryError }); return; }
+    const estado = getOptionalQueryValue(request.query.estado) as import("@prisma/client").LoanStatus | undefined;
+    if (estado && !["PENDIENTE", "SALDADO", "INCOBRABLE"].includes(estado)) { response.status(400).json({ error: "Invalid loan status." }); return; }
+    response.json(await getLoans(request.currentUser!.id, estado));
+  } catch (error) { next(error); }
+});
+
+app.post("/loans", requireAuth, async (request, response, next) => {
+  try { response.status(201).json({ loan: await createLoan(request.body, request.currentUser!.id) }); } catch (error) { next(error); }
+});
+app.get("/loans/:id", requireAuth, async (request, response, next) => {
+  try { response.json({ loan: await getLoanById(request.params.id, request.currentUser!.id) }); } catch (error) { next(error); }
+});
+app.post("/loans/:id/repayments", requireAuth, async (request, response, next) => {
+  try { response.status(201).json({ repayment: await repayLoan(request.params.id, request.body, request.currentUser!.id) }); } catch (error) { next(error); }
+});
+app.patch("/loans/:id", requireAuth, async (request, response, next) => {
+  try { response.json({ loan: await updateLoan(request.params.id, request.body, request.currentUser!.id) }); } catch (error) { next(error); }
+});
+app.delete("/loans/:id", requireAuth, async (request, response, next) => {
+  try { await deleteLoan(request.params.id, request.currentUser!.id); response.status(204).send(); } catch (error) { next(error); }
+});
+app.patch("/loans/:id/status", requireAuth, async (request, response, next) => {
+  try { response.json({ loan: await updateLoanStatus(request.params.id, request.body, request.currentUser!.id) }); } catch (error) { next(error); }
+});
+
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (error instanceof z.ZodError) {
     response.status(400).json({ error: "Invalid request body", issues: error.issues });
@@ -409,10 +439,19 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
     return;
   }
 
+  if (error instanceof LoanAccountConflictError) {
+    response.status(409).json({ error: error.message });
+    return;
+  }
+
   if (error instanceof TransactionValidationError) {
     response.status(400).json({ error: error.message });
     return;
   }
+
+  if (error instanceof LoanNotFoundError) { response.status(404).json({ error: error.message }); return; }
+  if (error instanceof LoanValidationError) { response.status(400).json({ error: error.message }); return; }
+  if (error instanceof LoanConflictError) { response.status(409).json({ error: error.message }); return; }
 
   if (error instanceof MovementValidationError) {
     response.status(400).json({ error: error.message });

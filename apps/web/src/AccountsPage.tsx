@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AccountGroup, AccountListItem, AccountType, AccountsData } from "./accountTypes";
 import { AccountEditor, type AccountEditorValues } from "./components/AccountEditor";
+import { authenticatedFetch } from "./authClient";
 
 type AccountsPageState =
   | { status: "loading" }
@@ -80,7 +81,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
     }
 
     try {
-      const response = await fetch(ACCOUNTS_ENDPOINT, { signal });
+      const response = await authenticatedFetch(ACCOUNTS_ENDPOINT, { signal });
 
       if (!response.ok) {
         throw new Error(`Accounts request failed with status ${response.status}.`);
@@ -124,7 +125,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
   }
 
   async function handleCreateAccount(values: AccountEditorValues) {
-    const response = await fetch(ACCOUNTS_ENDPOINT, {
+    const response = await authenticatedFetch(ACCOUNTS_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(values),
@@ -136,7 +137,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
   }
 
   async function handleUpdateAccount(accountId: string, values: AccountEditorValues) {
-    const response = await fetch(`${ACCOUNTS_ENDPOINT}/${accountId}`, {
+    const response = await authenticatedFetch(`${ACCOUNTS_ENDPOINT}/${accountId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(values),
@@ -190,7 +191,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
       account,
       action: "deactivate",
       prepare: () => window.confirm(`¿Quieres desactivar la cuenta ${account.nombre}? La cuenta y su historial se conservarán en Inactivas.`),
-      request: () => fetch(`${ACCOUNTS_ENDPOINT}/${account.id}/deactivate`, { method: "PATCH" }),
+      request: () => authenticatedFetch(`${ACCOUNTS_ENDPOINT}/${account.id}/deactivate`, { method: "PATCH" }),
       successMessage: "Cuenta desactivada correctamente.",
       getErrorMessage: () => "No se pudo desactivar la cuenta.",
     });
@@ -208,7 +209,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
 
         return window.confirm(`¿Quieres eliminar definitivamente la cuenta ${account.nombre}? Esta acción solo está disponible para cuentas sin historial.`);
       },
-      request: () => fetch(`${ACCOUNTS_ENDPOINT}/${account.id}`, { method: "DELETE" }),
+      request: () => authenticatedFetch(`${ACCOUNTS_ENDPOINT}/${account.id}`, { method: "DELETE" }),
       successMessage: "Cuenta eliminada definitivamente.",
       getErrorMessage: (response) => response.status === 409 ? "Esta cuenta tiene historial. Desactívala para conservar sus movimientos." : "No se pudo eliminar la cuenta.",
     });
@@ -218,7 +219,7 @@ export function AccountsPage({ onQuickEntry, onNavigateDashboard, onNavigateMove
     await runAccountAction({
       account,
       action: "reactivate",
-      request: () => fetch(`${ACCOUNTS_ENDPOINT}/${account.id}/reactivate`, { method: "PATCH" }),
+      request: () => authenticatedFetch(`${ACCOUNTS_ENDPOINT}/${account.id}/reactivate`, { method: "PATCH" }),
       successMessage: "Cuenta reactivada correctamente.",
       getErrorMessage: () => "No se pudo reactivar la cuenta.",
     });
