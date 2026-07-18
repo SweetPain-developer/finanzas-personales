@@ -15,7 +15,7 @@
 | Variables API | `apps/api/.env` debe definir `DATABASE_URL`; usar `apps/api/.env.example` como referencia. |
 | Prisma | Configuración activa en `apps/api/prisma.config.ts`; no usar `package.json#prisma`. |
 | Monorepo | Workspaces: `apps/*` y `packages/*`; API y Web se levantan por separado. |
-| Alcance V1 | Uso personal/local. Auth + ownership está planificado con JWT en cookie HTTP-only, `argon2id` y `INITIAL_USER_EMAIL`, pero aún no implementado; no exponer públicamente antes de ese corte verificado. |
+| Alcance V1 | Uso personal/local. Auth, login gate y ownership están implementados con JWT en cookie HTTP-only, `argon2id` y `INITIAL_USER_EMAIL`; la migración de enforcement está preparada pero pendiente de aplicación y verificación. No exponer públicamente antes de ese corte. |
 
 ---
 
@@ -48,6 +48,8 @@
 - `20260705190651_init`
 - `20260711120000_commitment_template_month_unique`
 - `20260711143000_commitment_payment_transaction_link`
+- `20260715100000_auth_ownership_structure`
+- `20260717100000_auth_ownership_enforcement` (preparada, pendiente de aplicación)
 
 ---
 
@@ -61,14 +63,14 @@
 | Prisma migrate status | `cd apps/api && pnpm prisma migrate status` | Migraciones sincronizadas con la BD local. |
 | Prisma generate | `cd apps/api && pnpm prisma:generate` | Client generado sin errores. |
 | Typecheck | `cd apps/api && pnpm typecheck` | Sin errores TypeScript. |
-| Tests | `cd apps/api && pnpm test` | Suite verde: 25 files, 282 tests. |
+| Tests | `cd apps/api && pnpm test` | Suite verde: 32 files, 388 tests, 1 skipped (integración PostgreSQL sin guardas). |
 
 ### Web
 
 | Paso | Comando | Resultado esperado |
 |---|---|---|
 | Typecheck | `cd apps/web && pnpm typecheck` | Sin errores TypeScript. |
-| Tests | `cd apps/web && pnpm test` | Suite verde: 6 files, 133 tests. |
+| Tests | `cd apps/web && pnpm test` | Suite verde: 8 files, 166 tests. |
 
 ---
 
@@ -79,7 +81,8 @@
 | Importador controlado | Existe y está cubierto por tests. |
 | Ejecución local real | Ejecutada correctamente tras backup y confirmación explícita. |
 | Backup local | Existe en carpeta local ignorada para respaldos; no versionar nombres ni detalles sensibles. |
-| Conteos post-importación | 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos, 4 metas. |
+| Snapshot auditado actual | 66 movimientos, 17 compromisos, 1 préstamo, 0 devoluciones. |
+| Conteos históricos post-importación | 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos, 4 metas. |
 | Advertencias conocidas | Algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. |
 
 El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: initial project setup`). Permanecen ignorados `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`. Los artefactos públicos versionados quedaron sanitizados con datos demo/genéricos.
@@ -120,7 +123,7 @@ El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: 
 | Opcional V1 | Completar PWA si bloquea uso diario: manifest, instalación móvil, iconos y offline básico. |
 | Opcional UX | Pulir labels de navegación inferior si la validación móvil lo pide. |
 | Opcional UX | Mejorar estados vacíos en vistas con pocos datos reales. |
-| Deploy | Cloudflare Pages + Render son opciones razonables más adelante; esperar a auth + ownership antes de exposición pública. |
+| Deploy | Cloudflare Pages + Render son opciones razonables más adelante; esperar enforcement de base de datos aplicado y verificado antes de exposición pública. |
 
 ---
 

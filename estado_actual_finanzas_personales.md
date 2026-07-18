@@ -1,12 +1,12 @@
 # Estado actual — Finanzas Personales
 
-Snapshot actualizado con evidencia funcional disponible al 12 de julio de 2026. Alcance: documentación solamente; no se modificó implementación.
+Snapshot actualizado con evidencia funcional disponible al 17 de julio de 2026. Alcance: documentación solamente; no se modificó implementación.
 
 ## 1. Resumen ejecutivo
 
 | Módulo | Estado | Cobertura de tests | Deuda conocida |
 |---|---|---:|---|
-| Dashboard | Completo | API/Web incluidos en suites verdes: API 282 tests, Web 133 tests | Variación patrimonial fija en `0`; default de mes `2026-07`. |
+| Dashboard | Completo | API/Web incluidos en suites verdes: API 388 tests, Web 166 tests | Variación patrimonial fija en `0`; default de mes `2026-07`. |
 | Cuentas | Completo | API: accounts; Web: `AccountsPage.test.tsx` | Sin scripts raíz para levantar todo junto. |
 | Movimientos | Completo | API: movements/transactions; Web: `MovementsPage.test.tsx` + Quick Entry | Swipe, scroll infinito y búsqueda avanzada siguen fuera del corte. |
 | Metas | Completo | API: goals; Web: `GoalsPage.test.tsx` | Progreso depende 100% de saldo de cuenta asociada; decisión válida pero debe entenderse en uso real. |
@@ -55,10 +55,11 @@ Snapshot actualizado con evidencia funcional disponible al 12 de julio de 2026. 
 - Prisma: `apps/api/prisma.config.ts` activo; `prisma validate` OK; `migrate status`: 3 migraciones y BD local al día.
 - Schema real: **6 modelos**, no 5: `Account`, `Category`, `Transaction`, `Commitment`, `CommitmentTemplate`, `Goal`.
 - Importación real: existe un importador controlado, testeado y ejecutado localmente después de backup y confirmación explícita. El backup queda solo en carpeta local ignorada para respaldos; no se documentan nombres reales ni rutas sensibles.
-- Conteos post-importación local: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+- Snapshot auditado actual: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. Conteos históricos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
 - Seguridad GitHub: repo inicializado y publicado en `origin/main` con commit `7ae4f07` (`chore: initial project setup`). Los archivos sensibles locales permanecen ignorados: `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`.
 - Sanitización pública: documentación, tests, seeds y mockups versionados usan datos demo/genéricos, sin datos financieros reales.
-- Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público debe esperar a auth + ownership implementado y verificado.
+ - Auth/ownership: login/logout/session, middleware `requireAuth`, scoping por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. El despliegue público debe esperar la aplicación y verificación del enforcement de base de datos.
+ - Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público debe esperar el enforcement de base de datos aplicado y verificado.
 
 ## 5. Deuda técnica activa e historial resuelto
 
@@ -75,17 +76,17 @@ Snapshot actualizado con evidencia funcional disponible al 12 de julio de 2026. 
 
 ## 6. Próximo paso único
 
-Implementar el siguiente corte arquitectónico planificado: autenticación con `User` + ownership por `userId`, antes de despliegue público o exposición fuera del entorno local.
+Aplicar en una ventana controlada la migración `20260717100000_auth_ownership_enforcement`, después del backfill y de todas sus verificaciones, antes de despliegue público o exposición fuera del entorno local.
 
 ## Planificación auth + ownership
 
-Las decisiones de autenticación quedaron cerradas y documentadas en `docs/diseno_auth_ownership_finanzas_personales.md`: JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado en el primer corte, sin registro público ni contraseña global. El plan de 8 slices está listo y el siguiente trabajo es **Slice 1: schema + seed con ownership**. **No está implementado todavía**.
+Las decisiones de autenticación quedaron cerradas y documentadas en `docs/diseno_auth_ownership_finanzas_personales.md`: JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado en el primer corte, sin registro público ni contraseña global. Auth, login gate y ownership API están implementados. El siguiente trabajo es la aplicación controlada del enforcement de base de datos; la migración está preparada, no aplicada.
 
 ## Evidencia ejecutada
 
 - `pnpm --filter @finanzas-personales/api typecheck` → OK, `tsc --noEmit` sin errores.
-- `pnpm --filter @finanzas-personales/api test` → **25 files passed, 282 tests passed**.
+- `pnpm --filter @finanzas-personales/api test` → **32 files passed, 388 tests passed, 1 skipped** (la integración PostgreSQL permanece omitida sin sus guardas).
 - `pnpm --filter @finanzas-personales/web typecheck` → OK, `tsc --noEmit` sin errores.
-- `pnpm --filter @finanzas-personales/web test` → **6 files passed, 133 tests passed**.
+- `pnpm --filter @finanzas-personales/web test` → **8 files passed, 166 tests passed**.
 - `pnpm --filter @finanzas-personales/api exec prisma validate` → schema válido.
-- `pnpm --filter @finanzas-personales/api exec prisma migrate status` → 3 migraciones, database schema up to date.
+- `prisma migrate status` / migración real → no ejecutados en esta verificación; la migración de enforcement permanece preparada, no aplicada según la evidencia documental disponible.

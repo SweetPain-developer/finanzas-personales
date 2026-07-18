@@ -29,7 +29,7 @@ describe("Préstamos por cobrar schema", () => {
     expect(loan).toMatch(/estado\s+LoanStatus\s+@default\(PENDIENTE\)/);
     expect(loan).toMatch(/notas\s+String\?/);
     expect(loan).toContain("userId");
-    expect(loan).toMatch(/user\s+User\s+@relation\("UserLoans", fields: \[userId\], references: \[id\], onDelete: Restrict\)/);
+    expect(loan).toMatch(/user\s+User\s+@relation\("UserLoans", fields: \[userId\], references: \[id\], onDelete: Restrict, onUpdate: Cascade\)/);
     expect(loan).toMatch(/entregaTransactionId\s+String\s+@unique/);
     expect(loan).toMatch(
       /entregaTransaction\s+Transaction\s+@relation\("LoanDelivery", fields: \[entregaTransactionId, userId\], references: \[id, userId\]/,
@@ -54,7 +54,7 @@ describe("Préstamos por cobrar schema", () => {
       /transaction\s+Transaction\s+@relation\("LoanRepaymentTransaction", fields: \[transactionId, userId\], references: \[id, userId\]/,
     );
     expect(repayment).toMatch(
-      /user\s+User\s+@relation\("UserLoanRepayments", fields: \[userId\], references: \[id\], onDelete: Restrict\)/,
+      /user\s+User\s+@relation\("UserLoanRepayments", fields: \[userId\], references: \[id\], onDelete: Restrict, onUpdate: Cascade\)/,
     );
     expect(repayment).toContain("@@unique([transactionId, userId])");
   });

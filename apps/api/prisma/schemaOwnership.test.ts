@@ -39,7 +39,7 @@ describe("Prisma ownership schema", () => {
 
       expect(block).toContain("userId");
       expect(block).toContain("user");
-      expect(block).toContain("@relation(fields: [userId], references: [id])");
+      expect(block).toMatch(/@relation\(fields: \[userId\], references: \[id\], onDelete: Restrict, onUpdate: Cascade\)/);
     },
   );
 

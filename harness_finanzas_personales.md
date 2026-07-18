@@ -8,7 +8,7 @@
 
 ## 1. Qué es este proyecto (una línea)
 
-PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Hoy opera como producto cerrado; auth + ownership está diseñado como próximo corte antes de deploy público.
+PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Hoy opera como producto cerrado; auth, login gate, ownership estructural y Loans están implementados, mientras el enforcement de base de datos está preparado pero pendiente de aplicación antes de deploy público.
 
 ## 2. Documentos fuente de verdad — cuándo consultar cada uno
 
@@ -46,7 +46,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 - Estándar UX aplicado: acciones múltiples en tarjetas van en fila horizontal inferior; eliminar rojo, pausar/desactivar/marcar pendiente ámbar, activar/reactivar/confirmar/marcar pagado verde, editar/cancelar/limpiar filtros neutral.
 - En `Movimientos`, el FAB se oculta durante detalle/edición para no bloquear acciones del formulario.
 - Estructura de repo: monorepo simplificado con workspaces (npm/pnpm), **sin Turborepo**. `apps/web`, `apps/api`, `packages/shared-types`.
-- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth no está implementado; el diseño aprobado es `User + userId` ownership, JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado y sin registro público en el primer slice.
+- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth de runtime, login gate Web y ownership por `User + userId` están implementados con JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado y sin registro público en el primer slice. La migración estructural y Loans están aplicadas; la migración de enforcement está preparada, pendiente de aplicación.
 - UI implementada con CSS real propio, sin Tailwind ni UI kit por ahora. No agregar librerías de estilos sin aprobación explícita.
 - Navegación actual: estado local simple en `App`, sin router ni state manager. No agregar router/state manager hasta que el flujo lo justifique.
 
@@ -65,7 +65,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 
 **Fase 1 (MVP funcional): en curso.** Objetivo: reemplazar Obsidian completamente durante 1 mes de uso real.
 
-### Estado real implementado al 12 jul 2026
+### Estado real implementado al 17 jul 2026
 
 Ya está implementado:
 
@@ -105,11 +105,12 @@ Ya está implementado:
 13. Estándares UX de acciones aplicados; el aviso de edición de plantilla recurrente fue validado visualmente durante la revisión del proyecto.
 14. Importador controlado de datos reales implementado y testeado; importación local real ejecutada correctamente tras backup y confirmación explícita.
 15. Repo inicializado y publicado en GitHub `origin/main` con commit `7ae4f07` (`chore: initial project setup`), manteniendo ignorados `.env`, workbooks, backups, `.atl`, `.opencode`, `node_modules` y `dist`.
-16. Documentación, tests, seeds y mockups públicos sanitizados con datos demo/genéricos.
+16. Auth API (login/logout/session), middleware `requireAuth`, scoping de ownership, login gate Web, logout y manejo de expiración/`401` implementados y cubiertos por tests.
+17. Documentación, tests, seeds y mockups públicos sanitizados con datos demo/genéricos.
 
 ### Datos locales post-importación
 
-Conteos de validación local: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+Snapshot auditado de estado actual: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. Los conteos históricos de 8 cuentas, 18 categorías, 8 plantillas y 4 metas se conservan donde describen ese alcance específico.
 
 Advertencias conocidas: algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. No inferir fechas reales a partir de ese fallback.
 
@@ -117,7 +118,7 @@ Nota de producto validada: el dashboard calcula disponible como balance operativ
 
 ### Próxima tarea concreta
 
-Siguiente corte explícito: implementar **Slice 1: schema + seed con ownership** según `docs/diseno_auth_ownership_finanzas_personales.md`. No escribir código antes de revisar el plan del slice; no hay deploy público ni exposición fuera del entorno local hasta que auth + ownership estén implementados y verificados.
+Siguiente corte explícito: revisar y aplicar en una ventana controlada la migración `20260717100000_auth_ownership_enforcement`, después de confirmar el backfill y sus precondiciones. La migración está preparada, no aplicada; no hay deploy público ni exposición fuera del entorno local hasta completar esa aplicación y verificación.
 
 ### Backlog explícito — no dar por hecho
 

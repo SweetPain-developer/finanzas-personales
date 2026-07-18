@@ -2,7 +2,7 @@
 
 Este documento registra la decisión de implementar autenticación con modelo `User` y ownership por `userId` en las entidades financieras. La aplicación sigue siendo cerrada en el primer corte, pero el diseño evita una contraseña global compartida y prepara el camino para más usuarios sin reescribir el modelo de datos.
 
-**Estado actual**: diseño aprobado y documentado; todavía no está implementado. Este es el próximo trabajo arquitectónico antes de deploy público o exposición fuera del entorno local.
+**Estado actual**: auth/ownership estructural, autenticación de runtime, login gate Web, enforcement API y el schema de Loans están implementados; el backfill auditado está listo y la migración de enforcement de base de datos está preparada, pero aún pendiente de aplicación antes de deploy público o exposición fuera del entorno local.
 
 ## 1. Decisión resumida
 
@@ -82,19 +82,20 @@ Endpoints previstos:
 
 ### Estrategia de sesión/cookie
 
-La API debe usar un JWT firmado en una cookie HTTP-only para sostener la sesión del navegador. Esta es una decisión de diseño confirmada; todavía no describe comportamiento implementado.
+La API usa un JWT firmado en una cookie HTTP-only para sostener la sesión del navegador.
 
 Requisitos mínimos:
 
 - Secreto de firma por variable de entorno.
 - `httpOnly` para impedir acceso desde JavaScript del cliente.
-- `secure` en producción.
+- `secure` obligatorio en producción/HTTPS (`AUTH_COOKIE_SECURE=true`); `false` solo para local/tests.
 - `sameSite` compatible con el despliegue real.
 - Configuración explícita de CORS y cookies si Web y API quedan en orígenes distintos.
 
-Variables esperadas, a definir al implementar:
+Variables activas:
 
-- `AUTH_SECRET` o equivalente para firmar/verificar JWT.
+- `AUTH_JWT_SECRET` para firmar/verificar JWT; en producción debe tener al menos 32 caracteres.
+- `AUTH_COOKIE_SECURE`, obligatorio en `true` para producción/HTTPS y permitido en `false` solo para local/tests.
 - Configuración de cookie/session TTL.
 - Origen permitido para Web en producción.
 
@@ -137,7 +138,7 @@ La implementación debe cubrir:
 
 ## 5. Diseño Web
 
-### Login gate
+### Login gate (implementado)
 
 La Web debe mostrar una pantalla de login antes de acceder a la aplicación cuando no haya sesión válida.
 
@@ -182,7 +183,7 @@ La migración debe crear o resolver un usuario inicial mediante `INITIAL_USER_EM
 
 La migración local de datos ya importados debe tratarse con cuidado: antes de correrla contra una base real, validar backup y conteos por entidad. No tocar datos reales durante planificación o documentación.
 
-Estado local conocido al momento de documentar este diseño: la importación real ya fue ejecutada correctamente con backup previo. Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas. Algunos registros pueden usar la fecha técnica `2026-07-01` y campos opcionales de vencimiento/pago en `null`.
+Estado local auditado: auth/ownership estructural, auth de runtime, login gate Web, ownership API y Loans están implementados; el backfill no forma parte de esta preparación. Snapshot auditado: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. La migración posterior `20260717100000_auth_ownership_enforcement` está preparada con precondiciones, pero permanece pendiente de aplicación. Algunos registros pueden usar la fecha técnica `2026-07-01` y campos opcionales de vencimiento/pago en `null`.
 
 ### Importador de datos reales
 
@@ -199,23 +200,23 @@ El seed debe crear un usuario demo y asociar toda la data demo a ese usuario. Lo
 
 ## 7. Plan de implementación por slices
 
-Este plan define el orden de trabajo. No implica que las capacidades ya estén implementadas.
+Este plan conserva el orden histórico de implementación; las capacidades de los slices 2, 3, 4, 5 y 7 ya están implementadas. Los slices 1 y 6 describen la aplicación controlada pendiente del enforcement y del backfill.
 
-1. **Schema + seed con ownership**: agregar `User`, `userId`, relaciones e índices scoped; crear usuario inicial/demo y preparar backfill controlado.
-2. **Auth core API**: implementar login/logout/session, JWT firmado en cookie HTTP-only, `argon2id` y middleware `currentUser`.
-3. **Ownership en cuentas + Quick Entry**: aplicar scoping en cuentas, opciones de ingreso rápido y creación de movimientos desde Quick Entry.
-4. **Ownership en transacciones/movimientos**: aislar listados, edición, eliminación, transferencias internas y validaciones cruzadas.
-5. **Dashboard, metas y compromisos**: aplicar ownership a cálculos agregados, metas, plantillas recurrentes, compromisos, pago y reversa.
+1. **Schema + seed con ownership**: agregar `User`, `userId`, relaciones e índices scoped; crear usuario inicial/demo y preparar backfill controlado. La migración de enforcement queda preparada, pendiente de aplicación.
+2. **Auth core API**: implementado: login/logout/session, JWT firmado en cookie HTTP-only, `argon2id` y middleware `currentUser`.
+3. **Ownership en cuentas + Quick Entry**: implementado: scoping en cuentas, opciones de ingreso rápido y creación de movimientos desde Quick Entry.
+4. **Ownership en transacciones/movimientos**: implementado: listados, edición, eliminación, transferencias internas y validaciones cruzadas aisladas.
+5. **Dashboard, metas y compromisos**: implementado: ownership en cálculos agregados, metas, plantillas recurrentes, compromisos, pago y reversa.
 6. **Importador y backfill controlado**: exigir `INITIAL_USER_EMAIL`, validar conteos aprobados y asignar datos existentes al usuario inicial sin exponer detalles sensibles.
-7. **Login gate Web + logout**: bloquear acceso sin sesión, manejar expiración/`401`, enviar cookies y exponer logout.
+7. **Login gate Web + logout**: implementado: bloquear acceso sin sesión, manejar expiración/`401`, enviar cookies y exponer logout.
 8. **Hardening de config/deploy**: documentar variables, cookies, CORS, HTTPS, TTL y checklist de no deploy público hasta verificar auth + ownership.
 
 ## 8. Riesgos y decisiones abiertas
 
 | Tema | Estado |
 |---|---|
-| Estrategia de sesión | Cerrado: JWT firmado en cookie HTTP-only. Falta implementación. |
-| Hash de contraseña | Cerrado: `argon2id`. Falta implementación y elección de librería compatible. |
+| Estrategia de sesión | Cerrado e implementado: JWT firmado en cookie HTTP-only. |
+| Hash de contraseña | Cerrado e implementado: `argon2id`. |
 | Usuario inicial/backfill | Cerrado: `INITIAL_USER_EMAIL` es la fuente para resolver el usuario inicial y destino de backfill. |
 | Render/Cloudflare cookie/CORS | Abierto. Cloudflare Pages + Render son razonables más adelante; validar dominios, `sameSite`, `secure`, HTTPS y orígenes permitidos. |
 | Migración de datos locales ya importados | Parcialmente cerrado. Usuario destino vía `INITIAL_USER_EMAIL`; falta ejecutar backfill con ownership y validar conteos aprobados. |
@@ -224,17 +225,17 @@ Este plan define el orden de trabajo. No implica que las capacidades ya estén i
 ## 9. Checklist de aceptación
 
 - [ ] Existe modelo `User` con `email`, `passwordHash`, `displayName?`, `createdAt` y `updatedAt`.
-- [ ] `Account`, `Category`, `Transaction`, `CommitmentTemplate`, `Commitment` y `Goal` tienen `userId` obligatorio.
+- [ ] La migración de enforcement convierte `userId` en obligatorio en `Account`, `Category`, `Transaction`, `CommitmentTemplate`, `Commitment` y `Goal` al aplicarse.
 - [ ] Las constraints únicas relevantes están scoped por usuario.
-- [ ] Login, logout y session endpoints funcionan con JWT firmado en cookie HTTP-only.
-- [ ] Las contraseñas se almacenan con `argon2id`.
-- [ ] Requests sin sesión reciben `401`.
-- [ ] Todos los handlers usan `currentUser.id`, no `userId` enviado por cliente.
-- [ ] Lecturas y escrituras quedan aisladas por usuario.
-- [ ] Relaciones cruzadas no permiten mezclar entidades de usuarios distintos.
-- [ ] Web bloquea acceso sin sesión y permite logout.
-- [ ] Web envía cookies/credenciales en requests autenticados.
-- [ ] Web maneja expiración de sesión sin romper el flujo.
+- [x] Login, logout y session endpoints funcionan con JWT firmado en cookie HTTP-only.
+- [x] Las contraseñas se almacenan con `argon2id`.
+- [x] Requests sin sesión reciben `401`.
+- [x] Todos los handlers usan `currentUser.id`, no `userId` enviado por cliente.
+- [x] Lecturas y escrituras quedan aisladas por usuario.
+- [x] Relaciones cruzadas no permiten mezclar entidades de usuarios distintos.
+- [x] Web bloquea acceso sin sesión y permite logout.
+- [x] Web envía cookies/credenciales en requests autenticados.
+- [x] Web maneja expiración de sesión sin romper el flujo.
 - [ ] Migración/backfill asigna datos existentes al usuario resuelto por `INITIAL_USER_EMAIL`.
 - [ ] Importador real exige o resuelve usuario destino.
 - [ ] Seed demo crea datos asociados a un usuario demo.

@@ -1,7 +1,7 @@
 # Estructura de Proyecto — Finanzas Personales
 
 **Fecha**: 04 de julio de 2026
-**Estado**: Decisión cerrada — creada e implementada. MVP funcional avanzado al 12 de julio de 2026; auth + ownership queda como próximo corte arquitectónico antes de deploy público.
+**Estado**: Decisión cerrada — creada e implementada. MVP funcional avanzado; auth + ownership están implementados y el enforcement de base de datos queda como próximo corte antes de deploy público.
 **Contexto**: definido en `/docs`, junto a `documento_base_finanzas_personales.md`, `diseno_ui_finanzas_personales.md` y `schema.prisma`
 
 ---
@@ -124,13 +124,14 @@ La estructura ya aloja el flujo incremental actual.
 - Validación registrada: el aviso al editar una plantilla recurrente ya generada fue validado visualmente por el usuario.
 - Importación real: flujo local controlado implementado, testeado y ejecutado correctamente después de backup y confirmación explícita. Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
 - Seguridad repo: `origin/main` publicado con commit `7ae4f07` (`chore: initial project setup`). Permanecen ignorados `.env`, workbooks de importación, backups, `.atl`, `.opencode`, `node_modules` y `dist`; artefactos públicos sanitizados con datos demo/genéricos.
-- Deploy: Cloudflare Pages + Render son opciones razonables más adelante, pero no se recomienda exponer la app hasta implementar auth + ownership.
+- Deploy: Cloudflare Pages + Render son opciones razonables más adelante, pero no se recomienda exponer la app hasta aplicar y verificar el enforcement de base de datos.
+- Auth: login/logout/session, middleware de autenticación, ownership por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. La migración de enforcement queda preparada, pendiente de aplicación.
 
 ---
 
 ## 4. Próximo paso
 
-El próximo paso técnico documentado es implementar **auth + ownership** con `User` y `userId` antes de deploy público. El diseño está en `docs/diseno_auth_ownership_finanzas_personales.md`; no está implementado todavía.
+El próximo paso técnico documentado es revisar y aplicar, en una ventana controlada, la migración de enforcement `20260717100000_auth_ownership_enforcement` después del backfill y sus verificaciones. Auth + ownership con `User` y `userId` ya están implementados; el diseño está en `docs/diseno_auth_ownership_finanzas_personales.md`.
 
 ### Checks útiles
 
