@@ -56,6 +56,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
+        env:
+          # Prisma reads this value while parsing prisma.config.ts; generate does not connect.
+          DATABASE_URL: postgresql://prisma-generate:prisma-generate@127.0.0.1:5432/prisma_generate
         run: pnpm --dir apps/api prisma:generate
 
       - name: API typecheck
