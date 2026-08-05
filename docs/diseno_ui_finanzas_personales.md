@@ -3,7 +3,7 @@
 **Proyecto**: Finanzas Personales
 **Fecha**: 04 de julio de 2026
 **Autor**: Equipo del proyecto
-**Estado**: Diseño actualizado con estado V1 funcional al 12 de julio de 2026
+**Estado**: Diseño actualizado con estado V1 funcional al 17 de julio de 2026
 **Base**: `documento_base_finanzas_personales.md` + `schema.prisma`
 
 > Nota de privacidad: todos los nombres de cuentas, montos, compromisos y metas usados en wireframes son ejemplos ficticios.
@@ -503,7 +503,7 @@ Al tocar `[+]` o una meta existente:
 
 ## 7. Préstamos por cobrar
 
-> **Estado**: diseño aprobado, pendiente de implementación. Esta sección registra el primer slice del módulo; no declara cambios realizados en el schema, la API ni la aplicación productiva.
+> **Estado**: implementado end-to-end y aplicado localmente. Esta sección conserva las decisiones del primer slice y describe el schema, la API y la aplicación productiva actuales; no declara deploy público ni enforcement remoto.
 
 ### Propósito y límites del concepto
 
@@ -551,6 +551,12 @@ El detalle de cada préstamo muestra el saldo pendiente derivado y el historial 
 ### No-objetivos del primer slice
 
 No se incluyen intereses, cuotas, vencimientos, recordatorios, contactos, múltiples entregas asociadas al mismo préstamo ni patrimonio total. El módulo tampoco redefine el cálculo de patrimonio líquido ni convierte los préstamos en movimientos ordinarios de ingresos/gastos.
+
+### Estado implementado al 17 jul 2026
+
+- `Loan` y `LoanRepayment` existen en schema y API, con ownership y operaciones atómicas de entrega/devolución.
+- Web implementa pantalla, historial, estados `PENDIENTE`/`SALDADO`/`INCOBRABLE`, Quick Entry y tarjeta Dashboard **Por cobrar**.
+- Entregas y devoluciones quedan excluidas de ingresos/gastos ordinarios; el snapshot local auditado contiene 1 préstamo y 0 devoluciones.
 
 ## 8. Decisiones cerradas (04 jul 2026)
 
@@ -613,7 +619,7 @@ Esto no requiere cambios de schema — ya está soportado porque `Account` no ti
 
 ## 9. Próximos pasos sugeridos
 
-1. Implementar auth + ownership (`User` + `userId`) antes de deploy público o acceso fuera de entorno local controlado.
+1. Repetir el runbook de backup, quiescence, backfill, enforcement y verificación en cualquier destino antes de deploy público.
 2. Preparar checklist de entrega V1 y cerrar deuda UX menor detectada en uso real.
 3. Completar PWA solo si bloquea el uso diario: manifest, instalación móvil, iconos y offline básico.
 4. Evaluar opcionales post-MVP: atajo "Agregar a esta meta", búsqueda/scroll en movimientos y scripts raíz para levantar web + API juntos.

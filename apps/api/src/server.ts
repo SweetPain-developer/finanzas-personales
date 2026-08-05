@@ -1,7 +1,8 @@
 import { app } from "./app.js";
+import { getServerConfig } from "./serverConfig.js";
 
-const port = Number(process.env.PORT ?? 3001);
+const { port, host } = getServerConfig();
 
-app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`API listening on http://${host}:${port}`);
 });

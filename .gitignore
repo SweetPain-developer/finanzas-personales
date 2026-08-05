@@ -5,6 +5,7 @@ dist/
 .atl/
 .opencode/
 backups/
+.codegraph/
 docs/importacion/backups/
 
 # Real financial data / local import workbooks

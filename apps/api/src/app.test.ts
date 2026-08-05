@@ -172,7 +172,14 @@ vi.mock("./loans/loans.js", () => ({
 vi.mock("./prisma.js", () => ({
   prisma: {
     user: {
-      findUnique: vi.fn(),
+      findUnique: vi.fn(async ({ where }: { where: { email?: string; id?: string } }) => ({
+        id: where.id ?? "user-demo",
+        email: where.email ?? "demo@example.com",
+        displayName: "Demo User",
+        passwordHash: "unused",
+        sessionVersion: 0,
+      })),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -215,8 +222,25 @@ const mockedUpdateLoanStatus = vi.mocked(updateLoanStatus);
 
 process.env.AUTH_JWT_SECRET = "test-secret-with-enough-entropy";
 process.env.AUTH_COOKIE_SECURE = "false";
+process.env.AUTH_ALLOWED_ORIGINS = "http://localhost:5173";
 
 const authCookie = `auth_token=${createSessionToken({ id: "user-demo", email: "demo@example.com", displayName: "Demo User" })}`;
+
+describe("CORS", () => {
+  it("allows credentials only for an authorized origin", async () => {
+    const response = await request(app).get("/health").set("Origin", "http://localhost:5173").expect(200);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
+  it("does not grant CORS access to an unauthorized origin", async () => {
+    const response = await request(app).get("/health").set("Origin", "https://untrusted.example").expect(200);
+
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(response.headers["access-control-allow-credentials"]).toBeUndefined();
+  });
+});
 
 describe("GET /dashboard", () => {
   beforeEach(() => {

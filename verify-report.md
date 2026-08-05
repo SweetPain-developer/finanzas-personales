@@ -1,7 +1,7 @@
 # Checklist de entrega V1 — Finanzas Personales
 
 **Estado**: checklist operativo para entregar o retomar el proyecto con seguridad.  
-**Última actualización**: 12 de julio de 2026.  
+**Última actualización**: 17 de julio de 2026.
 **Alcance**: validación local de API, Web, Prisma, importación controlada y flujos principales del MVP.
 
 ---
@@ -15,7 +15,7 @@
 | Variables API | `apps/api/.env` debe definir `DATABASE_URL`; usar `apps/api/.env.example` como referencia. |
 | Prisma | Configuración activa en `apps/api/prisma.config.ts`; no usar `package.json#prisma`. |
 | Monorepo | Workspaces: `apps/*` y `packages/*`; API y Web se levantan por separado. |
-| Alcance V1 | Uso personal/local. Auth, login gate y ownership están implementados con JWT en cookie HTTP-only, `argon2id` y `INITIAL_USER_EMAIL`; la migración de enforcement está preparada pero pendiente de aplicación y verificación. No exponer públicamente antes de ese corte. |
+| Alcance V1 | Uso personal/local. Auth, login gate, ownership y Loans están implementados; enforcement aplicado y verificado localmente con JWT en cookie HTTP-only, `argon2id` y `INITIAL_USER_EMAIL`. No se declara enforcement remoto ni deploy público. |
 
 ---
 
@@ -49,7 +49,9 @@
 - `20260711120000_commitment_template_month_unique`
 - `20260711143000_commitment_payment_transaction_link`
 - `20260715100000_auth_ownership_structure`
-- `20260717100000_auth_ownership_enforcement` (preparada, pendiente de aplicación)
+- `20260716100000_loans_receivable` (aplicada localmente)
+- `20260717100000_auth_ownership_enforcement` (aplicada localmente)
+- `20260801100000_session_revocation`
 
 ---
 
@@ -63,7 +65,7 @@
 | Prisma migrate status | `cd apps/api && pnpm prisma migrate status` | Migraciones sincronizadas con la BD local. |
 | Prisma generate | `cd apps/api && pnpm prisma:generate` | Client generado sin errores. |
 | Typecheck | `cd apps/api && pnpm typecheck` | Sin errores TypeScript. |
-| Tests | `cd apps/api && pnpm test` | Suite verde: 32 files, 388 tests, 1 skipped (integración PostgreSQL sin guardas). |
+| Tests | `cd apps/api && pnpm test` | Suite normal: 422 tests passed, 2 skipped; integración PostgreSQL opt-in y skipped por defecto. |
 
 ### Web
 
@@ -81,8 +83,7 @@
 | Importador controlado | Existe y está cubierto por tests. |
 | Ejecución local real | Ejecutada correctamente tras backup y confirmación explícita. |
 | Backup local | Existe en carpeta local ignorada para respaldos; no versionar nombres ni detalles sensibles. |
-| Snapshot auditado actual | 66 movimientos, 17 compromisos, 1 préstamo, 0 devoluciones. |
-| Conteos históricos post-importación | 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos, 4 metas. |
+| Snapshot auditado actual | 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo, 0 devoluciones. |
 | Advertencias conocidas | Algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. |
 
 El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: initial project setup`). Permanecen ignorados `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`. Los artefactos públicos versionados quedaron sanitizados con datos demo/genéricos.
@@ -104,6 +105,7 @@ El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: 
 - [ ] **Navegación mensual de compromisos**: moverse entre meses y validar datos correctos por período.
 - [ ] **Pagar compromiso**: marcar como pagado, crear movimiento asociado y descontar saldo.
 - [ ] **Revertir pago**: volver a pendiente, eliminar movimiento asociado y restaurar saldo.
+- [x] **Loans end-to-end**: entrega, devolución, estados, historial, ownership, Dashboard Por cobrar y Quick Entry.
 
 ### UX rápida
 
@@ -123,7 +125,7 @@ El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: 
 | Opcional V1 | Completar PWA si bloquea uso diario: manifest, instalación móvil, iconos y offline básico. |
 | Opcional UX | Pulir labels de navegación inferior si la validación móvil lo pide. |
 | Opcional UX | Mejorar estados vacíos en vistas con pocos datos reales. |
-| Deploy | Cloudflare Pages + Render son opciones razonables más adelante; esperar enforcement de base de datos aplicado y verificado antes de exposición pública. |
+| Deploy | Cloudflare Pages + Render son opciones razonables más adelante; repetir backup, quiescence, backfill, enforcement y verificación en destino antes de exposición pública. |
 
 ---
 
@@ -143,3 +145,17 @@ El repo ya fue inicializado y publicado en `origin/main` con `7ae4f07` (`chore: 
 - [ ] Checklist manual funcional completado sin bloqueantes.
 - [ ] Limitaciones conocidas aceptadas explícitamente para V1.
 - [ ] Auth + ownership implementado si el objetivo es despliegue público o acceso desde redes no controladas.
+
+### Evidencia histórica de la actualización del 17 de julio de 2026
+
+- Integración PostgreSQL efímera: **7 tests passed**; es opt-in y no forma parte de la suite normal.
+- API normal: **396 passed, 1 skipped**. Web: **166 passed**. Typechecks, builds y `prisma validate`: OK.
+- `AUTH_JWT_SECRET` requiere mínimo 32 caracteres y `AUTH_COOKIE_SECURE=true` en producción; local/tests son flexibles.
+- Publicado: `3a61582 feat: add loans and web authentication` y `fb16002 feat(auth): enforce ownership constraints`.
+- `.codegraph/` es artefacto local excluido/untracked. El CSS de alturas de botones en Movimientos sigue pendiente local y sin commit.
+
+### Evidencia post-WU-1 — 5 de agosto de 2026
+
+- API: **422 passed, 2 skipped** en la ejecución normal.
+- Web: **166 passed**.
+- Integración PostgreSQL dedicada: **2/2** cuando se habilitan sus guardas efímeras.

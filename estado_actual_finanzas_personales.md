@@ -1,16 +1,17 @@
 # Estado actual — Finanzas Personales
 
-Snapshot actualizado con evidencia funcional disponible al 17 de julio de 2026. Alcance: documentación solamente; no se modificó implementación.
+Snapshot actualizado con evidencia funcional disponible al 17 de julio de 2026. Alcance: documentación solamente; el ajuste CSS local previo permanece sin commit.
 
 ## 1. Resumen ejecutivo
 
 | Módulo | Estado | Cobertura de tests | Deuda conocida |
 |---|---|---:|---|
-| Dashboard | Completo | API/Web incluidos en suites verdes: API 388 tests, Web 166 tests | Variación patrimonial fija en `0`; default de mes `2026-07`. |
+| Dashboard | Completo | Histórico al 17 jul.: API 396 passed/1 skipped; Web 166 passed | Muestra desglose; variación patrimonial fija en `0`; default de mes `2026-07`. |
 | Cuentas | Completo | API: accounts; Web: `AccountsPage.test.tsx` | Sin scripts raíz para levantar todo junto. |
 | Movimientos | Completo | API: movements/transactions; Web: `MovementsPage.test.tsx` + Quick Entry | Swipe, scroll infinito y búsqueda avanzada siguen fuera del corte. |
 | Metas | Completo | API: goals; Web: `GoalsPage.test.tsx` | Progreso depende 100% de saldo de cuenta asociada; decisión válida pero debe entenderse en uso real. |
 | Compromisos | Completo para V1 operativa | API: commitments/templates; Web: `CommitmentsPage.test.tsx` | Compromisos pagados legacy locales sin `paymentTransactionId`; reversa legacy bloqueada. Accesibilidad real general no validada end-to-end. |
+| Loans | Completo end-to-end, aplicado localmente | Incluido en API/Web; integración PostgreSQL opt-in | 1 préstamo y 0 devoluciones en snapshot; deploy público/CI pendiente. |
 
 ## 2. Módulos implementados
 
@@ -52,14 +53,14 @@ Snapshot actualizado con evidencia funcional disponible al 17 de julio de 2026. 
 
 - Monorepo pnpm: `apps/api`, `apps/web`, `packages/shared-types`; sin Turborepo.
 - Scripts: API `dev`, `test`, `typecheck`, `prisma:generate`, `prisma:migrate`, `prisma:seed`; Web `dev`, `build`, `test`, `typecheck`, `preview`.
-- Prisma: `apps/api/prisma.config.ts` activo; `prisma validate` OK; `migrate status`: 3 migraciones y BD local al día.
-- Schema real: **6 modelos**, no 5: `Account`, `Category`, `Transaction`, `Commitment`, `CommitmentTemplate`, `Goal`.
+- Prisma: `apps/api/prisma.config.ts` activo; `prisma validate` OK; `migrate status` se verifica contra la historia completa del repositorio y la BD local objetivo.
+- Schema real: **9 modelos**: `User`, `Account`, `Category`, `Transaction`, `Commitment`, `CommitmentTemplate`, `Goal`, `Loan` y `LoanRepayment`.
 - Importación real: existe un importador controlado, testeado y ejecutado localmente después de backup y confirmación explícita. El backup queda solo en carpeta local ignorada para respaldos; no se documentan nombres reales ni rutas sensibles.
-- Snapshot auditado actual: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. Conteos históricos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+- Snapshot auditado actual: 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo y 0 devoluciones. No se documentan nombres personales, contraseñas, hashes, URLs secretas ni montos identificables.
 - Seguridad GitHub: repo inicializado y publicado en `origin/main` con commit `7ae4f07` (`chore: initial project setup`). Los archivos sensibles locales permanecen ignorados: `.env`, workbooks de importación, respaldos, `.atl`, `.opencode`, `node_modules` y `dist`.
 - Sanitización pública: documentación, tests, seeds y mockups versionados usan datos demo/genéricos, sin datos financieros reales.
- - Auth/ownership: login/logout/session, middleware `requireAuth`, scoping por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. El despliegue público debe esperar la aplicación y verificación del enforcement de base de datos.
- - Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público debe esperar el enforcement de base de datos aplicado y verificado.
+- Auth/ownership: login/logout/session, middleware `requireAuth`, scoping por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. Enforcement local aplicado: `userId NOT NULL`, FKs owner-scoped/`RESTRICT` y categorías únicas por `userId`.
+- Deploy: Cloudflare Pages para Web y Render para API son razonables más adelante, pero el despliegue público/CI requiere repetir el runbook en destino; no se declara enforcement remoto.
 
 ## 5. Deuda técnica activa e historial resuelto
 
@@ -76,7 +77,7 @@ Snapshot actualizado con evidencia funcional disponible al 17 de julio de 2026. 
 
 ## 6. Próximo paso único
 
-Aplicar en una ventana controlada la migración `20260717100000_auth_ownership_enforcement`, después del backfill y de todas sus verificaciones, antes de despliegue público o exposición fuera del entorno local.
+Repetir en el destino de deploy el runbook secuencial de backup, quiescence, backfill, enforcement y verificaciones. La migración `20260717100000_auth_ownership_enforcement` ya está aplicada y verificada localmente.
 
 ## Planificación auth + ownership
 
@@ -85,8 +86,12 @@ Las decisiones de autenticación quedaron cerradas y documentadas en `docs/disen
 ## Evidencia ejecutada
 
 - `pnpm --filter @finanzas-personales/api typecheck` → OK, `tsc --noEmit` sin errores.
-- `pnpm --filter @finanzas-personales/api test` → **32 files passed, 388 tests passed, 1 skipped** (la integración PostgreSQL permanece omitida sin sus guardas).
+- Evidencia histórica del snapshot del 17 jul.: `pnpm --filter @finanzas-personales/api test` → **396 tests passed, 1 skipped** (la integración PostgreSQL era opt-in y permanecía omitida en la suite normal).
 - `pnpm --filter @finanzas-personales/web typecheck` → OK, `tsc --noEmit` sin errores.
 - `pnpm --filter @finanzas-personales/web test` → **8 files passed, 166 tests passed**.
 - `pnpm --filter @finanzas-personales/api exec prisma validate` → schema válido.
-- `prisma migrate status` / migración real → no ejecutados en esta verificación; la migración de enforcement permanece preparada, no aplicada según la evidencia documental disponible.
+- Evidencia histórica del snapshot del 17 jul.: integración PostgreSQL efímera → **7 tests passed**, ejecutada de forma opt-in contra una base dedicada.
+- Evidencia post-WU-1 (5 ago. 2026): API **422 passed, 2 skipped**; Web **166 passed**; integración PostgreSQL dedicada **2/2** cuando se habilitan sus guardas efímeras.
+- `pnpm --filter @finanzas-personales/api build`, `pnpm --filter @finanzas-personales/web build` y `prisma validate` → OK.
+- Migraciones → `20260716100000_loans_receivable` y `20260717100000_auth_ownership_enforcement` aplicadas localmente; `20260801100000_session_revocation` forma parte de la historia del repositorio; no se declara aplicación remota.
+- Commits publicados: `3a61582 feat: add loans and web authentication` y `fb16002 feat(auth): enforce ownership constraints`. El ajuste CSS de botones de Movimientos permanece local y sin commit.

@@ -2,7 +2,7 @@
 
 Este documento registra la decisión de implementar autenticación con modelo `User` y ownership por `userId` en las entidades financieras. La aplicación sigue siendo cerrada en el primer corte, pero el diseño evita una contraseña global compartida y prepara el camino para más usuarios sin reescribir el modelo de datos.
 
-**Estado actual**: auth/ownership estructural, autenticación de runtime, login gate Web, enforcement API y el schema de Loans están implementados; el backfill auditado está listo y la migración de enforcement de base de datos está preparada, pero aún pendiente de aplicación antes de deploy público o exposición fuera del entorno local.
+**Estado actual (17 jul 2026)**: auth/ownership estructural, autenticación de runtime, login gate Web, enforcement API, schema/API/Web de Loans y enforcement de base de datos están implementados y verificados localmente. Las migraciones `20260716100000_loans_receivable` y `20260717100000_auth_ownership_enforcement` están aplicadas localmente; no se declara aplicación remota.
 
 ## 1. Decisión resumida
 
@@ -183,7 +183,7 @@ La migración debe crear o resolver un usuario inicial mediante `INITIAL_USER_EM
 
 La migración local de datos ya importados debe tratarse con cuidado: antes de correrla contra una base real, validar backup y conteos por entidad. No tocar datos reales durante planificación o documentación.
 
-Estado local auditado: auth/ownership estructural, auth de runtime, login gate Web, ownership API y Loans están implementados; el backfill no forma parte de esta preparación. Snapshot auditado: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. La migración posterior `20260717100000_auth_ownership_enforcement` está preparada con precondiciones, pero permanece pendiente de aplicación. Algunos registros pueden usar la fecha técnica `2026-07-01` y campos opcionales de vencimiento/pago en `null`.
+Estado local auditado: auth/ownership estructural, auth de runtime, login gate Web, ownership API, Loans y enforcement local están implementados y aplicados. Snapshot auditado: 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo y 0 devoluciones. No se documentan datos personales ni secretos. Algunos registros pueden usar la fecha técnica `2026-07-01` y campos opcionales de vencimiento/pago en `null`.
 
 ### Importador de datos reales
 
@@ -200,16 +200,16 @@ El seed debe crear un usuario demo y asociar toda la data demo a ese usuario. Lo
 
 ## 7. Plan de implementación por slices
 
-Este plan conserva el orden histórico de implementación; las capacidades de los slices 2, 3, 4, 5 y 7 ya están implementadas. Los slices 1 y 6 describen la aplicación controlada pendiente del enforcement y del backfill.
+Este plan conserva el orden histórico de implementación; las capacidades de los slices 1 a 8 están implementadas y verificadas localmente. La repetición del procedimiento en un destino de deploy sigue siendo pendiente.
 
-1. **Schema + seed con ownership**: agregar `User`, `userId`, relaciones e índices scoped; crear usuario inicial/demo y preparar backfill controlado. La migración de enforcement queda preparada, pendiente de aplicación.
+1. **Schema + seed con ownership**: implementado; `User`, `userId`, relaciones e índices scoped, usuario inicial/demo y backfill controlado disponibles. Enforcement aplicado y verificado localmente.
 2. **Auth core API**: implementado: login/logout/session, JWT firmado en cookie HTTP-only, `argon2id` y middleware `currentUser`.
 3. **Ownership en cuentas + Quick Entry**: implementado: scoping en cuentas, opciones de ingreso rápido y creación de movimientos desde Quick Entry.
 4. **Ownership en transacciones/movimientos**: implementado: listados, edición, eliminación, transferencias internas y validaciones cruzadas aisladas.
 5. **Dashboard, metas y compromisos**: implementado: ownership en cálculos agregados, metas, plantillas recurrentes, compromisos, pago y reversa.
-6. **Importador y backfill controlado**: exigir `INITIAL_USER_EMAIL`, validar conteos aprobados y asignar datos existentes al usuario inicial sin exponer detalles sensibles.
+6. **Importador y backfill controlado**: implementado y verificado localmente; exige `INITIAL_USER_EMAIL`, valida conteos aprobados y asigna datos existentes sin exponer detalles sensibles.
 7. **Login gate Web + logout**: implementado: bloquear acceso sin sesión, manejar expiración/`401`, enviar cookies y exponer logout.
-8. **Hardening de config/deploy**: documentar variables, cookies, CORS, HTTPS, TTL y checklist de no deploy público hasta verificar auth + ownership.
+8. **Hardening de config/deploy**: implementado para producción; `AUTH_JWT_SECRET` mínimo de 32 caracteres y `AUTH_COOKIE_SECURE=true`. Local/tests mantienen configuración flexible; deploy público/CI aún requiere repetir el runbook en destino.
 
 ## 8. Riesgos y decisiones abiertas
 
@@ -219,7 +219,7 @@ Este plan conserva el orden histórico de implementación; las capacidades de lo
 | Hash de contraseña | Cerrado e implementado: `argon2id`. |
 | Usuario inicial/backfill | Cerrado: `INITIAL_USER_EMAIL` es la fuente para resolver el usuario inicial y destino de backfill. |
 | Render/Cloudflare cookie/CORS | Abierto. Cloudflare Pages + Render son razonables más adelante; validar dominios, `sameSite`, `secure`, HTTPS y orígenes permitidos. |
-| Migración de datos locales ya importados | Parcialmente cerrado. Usuario destino vía `INITIAL_USER_EMAIL`; falta ejecutar backfill con ownership y validar conteos aprobados. |
+| Migración de datos locales ya importados | Cerrado localmente. Usuario destino vía `INITIAL_USER_EMAIL`; backfill, enforcement y conteos fueron verificados localmente. Falta repetir el procedimiento en cualquier destino de deploy. |
 | TTL y renovación de sesión | Abierto. Definir duración y comportamiento al expirar. |
 
 ## 9. Checklist de aceptación

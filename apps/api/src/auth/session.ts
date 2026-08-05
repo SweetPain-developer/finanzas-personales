@@ -13,13 +13,18 @@ export type CurrentUser = {
 
 export class AuthenticationError extends Error {}
 
+// Keep password verification work comparable when the email does not exist.
+const DUMMY_PASSWORD_HASH = "$argon2id$v=19$m=65536,t=3,p=4$otuGJANt1UyT+MhsrUAhLA$2qM9xl5NiANFCjD1Yf+JOSIefRdUL6zllLHlOyUw4tU";
+
 type AuthUserRecord = CurrentUser & {
   passwordHash: string;
+  sessionVersion?: number;
 };
 
 const authUserReader = prisma as unknown as {
   user: {
-    findUnique(args: { where: { email: string } }): Promise<AuthUserRecord | null>;
+      findUnique(args: { where: { email: string } | { id: string } }): Promise<AuthUserRecord | null>;
+      updateMany(args: { where: { id: string; sessionVersion: number }; data: { sessionVersion: { increment: number } } }): Promise<{ count: number }>;
   };
 };
 
@@ -27,18 +32,20 @@ export async function loginWithPassword(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   const user = await authUserReader.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user || !(await verifyPassword(user.passwordHash, password))) {
+  const passwordMatches = await verifyPassword(user?.passwordHash ?? DUMMY_PASSWORD_HASH, password);
+
+  if (!user || !passwordMatches) {
     throw new AuthenticationError("Invalid email or password.");
   }
 
-  return toCurrentUser(user);
+  return { ...toCurrentUser(user), sessionVersion: getSessionVersion(user) };
 }
 
-export function createSessionToken(user: CurrentUser) {
+export function createSessionToken(user: CurrentUser & { sessionVersion?: number }) {
   const config = getAuthConfig();
 
   return jwt.sign(
-    { sub: user.id, email: user.email, displayName: user.displayName },
+    { sub: user.id, email: user.email, displayName: user.displayName, sessionVersion: getSessionVersion(user) },
     config.jwtSecret,
     { expiresIn: config.sessionMaxAgeSeconds },
   );
@@ -52,17 +59,47 @@ export async function resolveCurrentUser(request: express.Request): Promise<Curr
   }
 
   try {
-    const payload = jwt.verify(token, getAuthConfig().jwtSecret);
-    const user = getUserFromPayload(payload);
+    const payload = getSessionClaims(jwt.verify(token, getAuthConfig().jwtSecret));
 
-    if (!user) {
+    if (!payload) {
       return null;
     }
 
-    return user;
+    const user = await authUserReader.user.findUnique({ where: { id: payload.sub } });
+    if (!user || getSessionVersion(user) !== payload.sessionVersion) {
+      return null;
+    }
+
+    return toCurrentUser(user);
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
       return null;
+    }
+
+    throw error;
+  }
+}
+
+export async function revokeCurrentSession(request: express.Request) {
+  const token = readCookie(request.headers.cookie, getAuthConfig().cookieName);
+
+  if (!token) {
+    return;
+  }
+
+  try {
+    const payload = getSessionClaims(jwt.verify(token, getAuthConfig().jwtSecret));
+    if (!payload) {
+      return;
+    }
+
+    await authUserReader.user.updateMany({
+      where: { id: payload.sub, sessionVersion: payload.sessionVersion },
+      data: { sessionVersion: { increment: 1 } },
+    });
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      return;
     }
 
     throw error;
@@ -73,10 +110,8 @@ export function setAuthCookie(response: express.Response, token: string) {
   const config = getAuthConfig();
 
   response.cookie(config.cookieName, token, {
-    httpOnly: true,
+    ...authCookieOptions(config),
     maxAge: config.sessionMaxAgeSeconds * 1000,
-    sameSite: "strict",
-    secure: config.cookieSecure,
   });
 }
 
@@ -84,11 +119,18 @@ export function clearAuthCookie(response: express.Response) {
   const config = getAuthConfig();
 
   response.cookie(config.cookieName, "", {
-    httpOnly: true,
+    ...authCookieOptions(config),
     maxAge: 0,
-    sameSite: "strict",
-    secure: config.cookieSecure,
   });
+}
+
+function authCookieOptions(config: ReturnType<typeof getAuthConfig>) {
+  return {
+    httpOnly: true,
+    sameSite: config.cookieSameSite,
+    secure: config.cookieSecure,
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+  } as const;
 }
 
 function readCookie(cookieHeader: string | undefined, name: string) {
@@ -114,21 +156,33 @@ function readCookie(cookieHeader: string | undefined, name: string) {
   }
 }
 
-function getUserFromPayload(payload: string | JwtPayload): CurrentUser | null {
+type SessionClaims = { sub: string; email: string; displayName: string | null; sessionVersion: number };
+
+function getSessionClaims(payload: string | JwtPayload): SessionClaims | null {
   if (
     typeof payload !== "object" ||
+    payload === null ||
     typeof payload.sub !== "string" ||
+    payload.sub.length === 0 ||
     typeof payload.email !== "string" ||
-    !(typeof payload.displayName === "string" || payload.displayName === null)
+    payload.email.length === 0 ||
+    !(typeof payload.displayName === "string" || payload.displayName === null) ||
+    !Number.isInteger(payload.sessionVersion) ||
+    (payload.sessionVersion as number) < 0
   ) {
     return null;
   }
 
   return {
-    id: payload.sub,
+    sub: payload.sub,
     email: payload.email,
     displayName: payload.displayName,
+    sessionVersion: payload.sessionVersion as number,
   };
+}
+
+function getSessionVersion(user: { sessionVersion?: number }) {
+  return Number.isInteger(user.sessionVersion) && (user.sessionVersion as number) >= 0 ? user.sessionVersion as number : 0;
 }
 
 function toCurrentUser(user: { id: string; email: string; displayName: string | null }) {

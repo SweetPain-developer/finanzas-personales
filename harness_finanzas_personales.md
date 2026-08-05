@@ -8,7 +8,7 @@
 
 ## 1. Qué es este proyecto (una línea)
 
-PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Hoy opera como producto cerrado; auth, login gate, ownership estructural y Loans están implementados, mientras el enforcement de base de datos está preparado pero pendiente de aplicación antes de deploy público.
+PWA de finanzas personales para uso local de una persona, pensada para reemplazar un workflow manual de notas + asistencia conversacional + planillas. Hoy opera como producto cerrado; auth, login gate, ownership estructural, enforcement local y Loans están implementados y aplicados localmente. El deploy público/CI sigue pendiente de su ventana y verificación correspondientes.
 
 ## 2. Documentos fuente de verdad — cuándo consultar cada uno
 
@@ -46,7 +46,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 - Estándar UX aplicado: acciones múltiples en tarjetas van en fila horizontal inferior; eliminar rojo, pausar/desactivar/marcar pendiente ámbar, activar/reactivar/confirmar/marcar pagado verde, editar/cancelar/limpiar filtros neutral.
 - En `Movimientos`, el FAB se oculta durante detalle/edición para no bloquear acciones del formulario.
 - Estructura de repo: monorepo simplificado con workspaces (npm/pnpm), **sin Turborepo**. `apps/web`, `apps/api`, `packages/shared-types`.
-- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth de runtime, login gate Web y ownership por `User + userId` están implementados con JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado y sin registro público en el primer slice. La migración estructural y Loans están aplicadas; la migración de enforcement está preparada, pendiente de aplicación.
+- Stack: React + TypeScript, Node.js + Express, PostgreSQL + Prisma, PWA. Auth de runtime, login gate Web y ownership por `User + userId` están implementados con JWT firmado en cookie HTTP-only, `argon2id`, usuario inicial/backfill vía `INITIAL_USER_EMAIL`, producto cerrado y sin registro público en el primer slice. Las migraciones de Loans y enforcement están aplicadas y verificadas localmente; no se declara aplicación en una base remota.
 - UI implementada con CSS real propio, sin Tailwind ni UI kit por ahora. No agregar librerías de estilos sin aprobación explícita.
 - Navegación actual: estado local simple en `App`, sin router ni state manager. No agregar router/state manager hasta que el flujo lo justifique.
 
@@ -65,7 +65,7 @@ PWA de finanzas personales para uso local de una persona, pensada para reemplaza
 
 **Fase 1 (MVP funcional): en curso.** Objetivo: reemplazar Obsidian completamente durante 1 mes de uso real.
 
-### Estado real implementado al 17 jul 2026
+### Estado real implementado y verificado localmente al 17 jul 2026
 
 Ya está implementado:
 
@@ -105,12 +105,17 @@ Ya está implementado:
 13. Estándares UX de acciones aplicados; el aviso de edición de plantilla recurrente fue validado visualmente durante la revisión del proyecto.
 14. Importador controlado de datos reales implementado y testeado; importación local real ejecutada correctamente tras backup y confirmación explícita.
 15. Repo inicializado y publicado en GitHub `origin/main` con commit `7ae4f07` (`chore: initial project setup`), manteniendo ignorados `.env`, workbooks, backups, `.atl`, `.opencode`, `node_modules` y `dist`.
-16. Auth API (login/logout/session), middleware `requireAuth`, scoping de ownership, login gate Web, logout y manejo de expiración/`401` implementados y cubiertos por tests.
-17. Documentación, tests, seeds y mockups públicos sanitizados con datos demo/genéricos.
+16. Auth API (login/logout/session), middleware `requireAuth`, scoping de ownership, login gate Web, logout y manejo de expiración/`401` implementados y cubiertos por tests. Web consulta sesión, muestra `LoginPage`, envía `credentials: include` y vuelve al gate ante `401`.
+17. Ownership aplicado a dashboard, metas, compromisos, plantillas, movimientos/transactions y cuentas; enforcement local con `userId NOT NULL`, FKs owner-scoped/`RESTRICT` y categorías únicas por `userId`.
+18. Loans end-to-end en schema/API/Web: `Loan` + `LoanRepayment`, estados `PENDIENTE`/`SALDADO`/`INCOBRABLE`, entrega, devoluciones, Dashboard **Por cobrar**, Quick Entry, pantalla, historial, ownership y exclusión de métricas ordinarias.
+19. Migraciones `20260716100000_loans_receivable` y `20260717100000_auth_ownership_enforcement` aplicadas localmente. El runbook para nuevas instalaciones y despliegues sigue siendo secuencial y exige backup, quiescence, backfill y verificaciones antes del enforcement.
+20. Hardening de producción documentado: `AUTH_JWT_SECRET` requiere mínimo 32 caracteres y `AUTH_COOKIE_SECURE=true`; local/tests pueden usar configuración flexible.
+21. Dashboard muestra desglose; el ajuste CSS local más reciente iguala las alturas de `Cancelar` y `Guardar cambios` en Movimientos y permanece pendiente de commit.
+22. Documentación, tests, seeds y mockups públicos sanitizados con datos demo/genéricos.
 
 ### Datos locales post-importación
 
-Snapshot auditado de estado actual: 66 movimientos, 17 compromisos, 1 préstamo y 0 devoluciones. Los conteos históricos de 8 cuentas, 18 categorías, 8 plantillas y 4 metas se conservan donde describen ese alcance específico.
+Snapshot auditado de estado actual: 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo y 0 devoluciones. No se documentan nombres personales, contraseñas, hashes, URLs secretas ni montos identificables.
 
 Advertencias conocidas: algunos registros usan fecha técnica `2026-07-01`; campos opcionales de vencimiento o pago pueden quedar en `null`. No inferir fechas reales a partir de ese fallback.
 
@@ -118,7 +123,7 @@ Nota de producto validada: el dashboard calcula disponible como balance operativ
 
 ### Próxima tarea concreta
 
-Siguiente corte explícito: revisar y aplicar en una ventana controlada la migración `20260717100000_auth_ownership_enforcement`, después de confirmar el backfill y sus precondiciones. La migración está preparada, no aplicada; no hay deploy público ni exposición fuera del entorno local hasta completar esa aplicación y verificación.
+Siguiente corte explícito: preparar deploy público/CI únicamente después de repetir el runbook secuencial en el destino correspondiente, con backup, quiescence, backfill, enforcement y verificaciones. La aplicación local ya está verificada; no se declara enforcement remoto ni deploy público realizado.
 
 ### Backlog explícito — no dar por hecho
 

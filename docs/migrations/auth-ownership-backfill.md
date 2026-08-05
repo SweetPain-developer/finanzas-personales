@@ -1,35 +1,36 @@
-# Auth ownership backfill runbook
+# Runbook de backfill y enforcement de auth/ownership
 
 This is a controlled, one-owner data migration for the existing financial data. It assigns ownership to existing rows; it does not create a second copy of the data and it does not run the enforcement migration's backfill.
 
 ## Migration history and gate
 
-There are three migrations in this historical sequence:
+Hay cuatro migraciones relevantes en esta secuencia histórica:
 
-1. `20260715100000_auth_ownership_structure` — creates `users` and the nullable ownership columns/indexes for the six original financial tables. It is structural only; it does not create credentials or assign ownership.
-2. `20260716100000_loans_receivable` — creates the Loans and loan repayments schema, including their ownership columns. It is structural only; it does not backfill or assign ownership.
-3. `20260717100000_auth_ownership_enforcement` — validates the owned data and adds `NOT NULL`, owner/composite foreign keys, and scoped uniqueness. It contains **no backfill**.
+1. `20260715100000_auth_ownership_structure` — crea `users` y las columnas/índices de ownership nullable para las seis tablas financieras originales. Es estructural; no crea credenciales ni asigna ownership.
+2. `20260716100000_loans_receivable` — crea el schema de Loans y devoluciones, incluidas sus columnas de ownership. Es estructural; no hace backfill ni asigna ownership.
+3. `20260717100000_auth_ownership_enforcement` — valida los datos con ownership y agrega `NOT NULL`, FKs owner-scoped/composite y unicidad scoped. No contiene backfill.
+4. `20260801100000_session_revocation` — agrega `sessionVersion` para permitir la revocación de sesiones. No contiene backfill de ownership.
 
-For the current database, migrations 1 and 2 must already be `APPLIED`. Migration 3 must be the **only pending migration** before enforcement. If either historical migration is not applied, or if any other migration is pending, abort. Do not try to apply the structural migration again.
+Para una base existente antes del enforcement, las migraciones 1 y 2 deben estar `APPLIED`; las migraciones 3 y 4 son la cola aprobada que puede permanecer pendiente. No se exige que enforcement sea la única pendiente: sí se exige que no haya ninguna migración pendiente fuera de esa cola aprobada. Esta secuencia ya fue aplicada y verificada localmente; no se declara aplicación en una base remota. Si el estado no coincide en otro destino, abortar.
 
-`prisma migrate deploy` applies the entire pending queue; it cannot select one migration by name. Therefore, never run it for the current database unless the queue contains exactly `20260717100000_auth_ownership_enforcement`.
+`prisma migrate deploy` aplica toda la cola pendiente; no selecciona una migración por nombre. Por eso, nunca ejecutarlo para una base existente salvo que la cola contenga únicamente migraciones aprobadas: `20260717100000_auth_ownership_enforcement` y, cuando corresponda, `20260801100000_session_revocation`.
 
 ## Current database: exact sequence
 
 1. **Quiesce first.** Stop the API, workers, importers, cron jobs, admin scripts, and every other writer for the full backup, backfill, verification, and enforcement window.
 2. **Take and verify a backup.** Confirm the backup exists and restore it into an isolated database. An unverified dump is not a rollback plan.
 3. **Check preconditions without changing data.** Confirm `NODE_ENV` is not `production`; use protected runtime injection for `AUTH_JWT_SECRET`, `INITIAL_USER_EMAIL`, and the backfill controls; never print secrets, passwords, hashes, or database URLs. Confirm the target database identity matches the approved host, port, and name. Confirm Loans and the structural ownership objects exist.
-4. **Inspect migration status.** Run `prisma migrate status` and inspect the complete queue. Abort unless `20260715100000_auth_ownership_structure` and `20260716100000_loans_receivable` are `APPLIED` and `20260717100000_auth_ownership_enforcement` is the only pending migration. If this exact state is not true, do not run `prisma migrate deploy`.
+4. **Inspect migration status.** Run `prisma migrate status` and inspect the complete queue. Abort unless `20260715100000_auth_ownership_structure` and `20260716100000_loans_receivable` are `APPLIED`, `20260717100000_auth_ownership_enforcement` remains pending for this run, and every other pending migration is one of the approved queue items (`20260801100000_session_revocation` may also be pending). If this guarded state is not true, do not run `prisma migrate deploy`.
 5. **Run the guarded backfill.** Provide an explicit initial user and audited expected counts. The backfill takes its transaction-scoped lock, creates or resolves exactly one initial user, and assigns existing rows. It must run while writers remain stopped.
 6. **Verify exhaustively before enforcement.** Recheck counts, null/orphan/cross-owner conditions, transfer ownership consistency, initial-user uniqueness, and preservation of IDs, amounts, statuses, payment links, and other financial values.
-7. **Recheck the queue.** Confirm the two historical migrations remain `APPLIED` and enforcement remains the only pending migration. Abort if anything changed or any additional migration is pending.
-8. **Apply enforcement only.** Run `prisma migrate deploy` only after all previous gates pass. This applies the pending enforcement migration; it does not perform the backfill. Review its SQL and deployment output separately.
+7. **Recheck the queue.** Confirm the two historical migrations remain `APPLIED`, enforcement remains pending, and the only other allowed pending item is `20260801100000_session_revocation`. Abort if anything changed or any additional migration is pending.
+8. **Apply the approved queue.** Run `prisma migrate deploy` only after all previous gates pass. This applies the pending enforcement and, when present, session-revocation migration; it does not perform the backfill. Review each SQL file and the deployment output separately.
 
-## New installations
+## Instalaciones nuevas
 
-For an empty new database, do not replay or manually recreate the structural migration. Use the repository migration history in order. After confirming the database is empty and the runtime configuration is valid, `prisma migrate deploy` may apply the complete pending queue—structural, Loans, and enforcement—because there are no pre-existing rows requiring ownership backfill. Create the initial/demo user and seed data only through the approved user-scoped seed path, after the schema is complete.
+Para una instalación nueva, no recrear manualmente migraciones estructurales ni asumir un atajo. Usar la historia del repositorio en orden y mantener el runbook secuencial: confirmar base objetivo, backup, quiescence, estado vacío, configuración, backfill/validaciones de ownership según corresponda y recién después enforcement. El hecho de que sea una base nueva no autoriza declarar aplicado el enforcement en un destino remoto.
 
-If a supposedly new installation contains any data, stop treating it as new and follow the current-database sequence above. Never use a seed, reset, import, or ad-hoc SQL operation to bypass the migration gate.
+Si una instalación supuestamente nueva contiene datos, dejar de tratarla como nueva y seguir la secuencia de base existente. Nunca usar seed, reset, importación ni SQL ad hoc para saltar el gate de migración.
 
 ## Backup and quiescence
 

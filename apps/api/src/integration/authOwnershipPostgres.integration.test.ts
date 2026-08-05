@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Prisma, PrismaClient } from "@prisma/client";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +72,9 @@ function runMigrations(tempPrismaRoot: string, url: string) {
 
 describe.skipIf(!integrationEnabled)("PostgreSQL auth ownership enforcement", () => {
   let prisma: PrismaClient;
+  let applicationPrisma: PrismaClient;
+  let application: typeof import("../app.js").app;
+  let createSessionToken: typeof import("../auth/session.js").createSessionToken;
   let temporaryPrismaRoot: string;
 
   beforeAll(async () => {
@@ -102,33 +106,40 @@ describe.skipIf(!integrationEnabled)("PostgreSQL auth ownership enforcement", ()
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "categories" ("id", "nombre", "icono", "tipo", "orden", "userId") VALUES
-        (${"category-a"}, ${"Food"}, ${"food"}, ${"GASTO"}::"CategoryType", ${0}, ${"user-a"})
+        (${"category-a"}, ${"Food"}, ${"food"}, ${"GASTO"}::"CategoryType", ${0}, ${"user-a"}),
+        (${"category-b"}, ${"B food"}, ${"food"}, ${"GASTO"}::"CategoryType", ${0}, ${"user-b"})
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "transactions" ("id", "tipo", "monto", "descripcion", "fecha", "createdAt", "updatedAt", "userId", "accountId", "categoryId") VALUES
-        (${"transaction-a"}, ${"GASTO"}::"TransactionType", ${100}, ${"Loan delivery"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"account-a"}, ${"category-a"}),
-        (${"transaction-b"}, ${"GASTO"}::"TransactionType", ${50}, ${"B transaction"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"}, ${"account-b"}, NULL),
-        (${"transaction-repayment"}, ${"INGRESO"}::"TransactionType", ${25}, ${"Loan repayment"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"account-a"}, NULL)
+        (${"transaction-a"}, ${"GASTO"}::"TransactionType", ${100}, ${"Loan delivery"}, ${new Date("2026-07-15T12:00:00.000Z")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"account-a"}, ${"category-a"}),
+        (${"transaction-b"}, ${"GASTO"}::"TransactionType", ${50}, ${"B transaction"}, ${new Date("2026-07-15T12:00:00.000Z")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"}, ${"account-b"}, ${"category-b"}),
+        (${"transaction-repayment"}, ${"INGRESO"}::"TransactionType", ${25}, ${"Loan repayment"}, ${new Date("2026-07-16T12:00:00.000Z")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"account-a"}, NULL),
+        (${"transaction-repayment-b"}, ${"INGRESO"}::"TransactionType", ${20}, ${"B loan repayment"}, ${new Date("2026-07-16T12:00:00.000Z")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"}, ${"account-b"}, NULL)
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "commitment_templates" ("id", "nombre", "tipo", "montoDefault", "activa", "createdAt", "updatedAt", "userId") VALUES
-        (${"template-a"}, ${"Internet"}, ${"RECURRENTE"}::"CommitmentType", ${50}, ${true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"})
+        (${"template-a"}, ${"Internet"}, ${"RECURRENTE"}::"CommitmentType", ${50}, ${true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}),
+        (${"template-b"}, ${"B internet"}, ${"RECURRENTE"}::"CommitmentType", ${40}, ${true}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"})
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "commitments" ("id", "nombre", "tipo", "monto", "estado", "mes", "anio", "createdAt", "updatedAt", "userId", "templateId", "paymentTransactionId") VALUES
-        (${"commitment-a"}, ${"Internet July"}, ${"RECURRENTE"}::"CommitmentType", ${50}, ${"PENDIENTE"}::"CommitmentStatus", ${7}, ${2026}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"template-a"}, NULL)
+        (${"commitment-a"}, ${"Internet July"}, ${"RECURRENTE"}::"CommitmentType", ${50}, ${"PENDIENTE"}::"CommitmentStatus", ${7}, ${2026}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}, ${"template-a"}, NULL),
+        (${"commitment-b"}, ${"B internet July"}, ${"RECURRENTE"}::"CommitmentType", ${40}, ${"PENDIENTE"}::"CommitmentStatus", ${7}, ${2026}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"}, ${"template-b"}, NULL)
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "goals" ("id", "nombre", "montoObjetivo", "estado", "accountId", "createdAt", "updatedAt", "userId") VALUES
-        (${"goal-a"}, ${"Emergency"}, ${5000}, ${"ACTIVA"}::"GoalStatus", ${"account-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"})
+        (${"goal-a"}, ${"Emergency"}, ${5000}, ${"ACTIVA"}::"GoalStatus", ${"account-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-a"}),
+        (${"goal-b"}, ${"B emergency"}, ${5000}, ${"ACTIVA"}::"GoalStatus", ${"account-b"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ${"user-b"})
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "loans" ("id", "persona", "montoEntregado", "estado", "notas", "entregaTransactionId", "userId", "createdAt", "updatedAt") VALUES
-        (${"loan-a"}, ${"Synthetic person"}, ${100}, ${"PENDIENTE"}::"LoanStatus", NULL, ${"transaction-a"}, ${"user-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        (${"loan-a"}, ${"Synthetic person"}, ${100}, ${"PENDIENTE"}::"LoanStatus", NULL, ${"transaction-a"}, ${"user-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${"loan-b"}, ${"B synthetic person"}, ${50}, ${"PENDIENTE"}::"LoanStatus", NULL, ${"transaction-b"}, ${"user-b"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "loan_repayments" ("id", "monto", "loanId", "transactionId", "userId", "createdAt", "updatedAt") VALUES
-        (${"repayment-a"}, ${25}, ${"loan-a"}, ${"transaction-repayment"}, ${"user-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        (${"repayment-a"}, ${25}, ${"loan-a"}, ${"transaction-repayment"}, ${"user-a"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${"repayment-b"}, ${20}, ${"loan-b"}, ${"transaction-repayment-b"}, ${"user-b"}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
     // Phase 2: backfill is represented by the synthetic userId assignments above;
@@ -137,6 +148,14 @@ describe.skipIf(!integrationEnabled)("PostgreSQL auth ownership enforcement", ()
       recursive: true,
     });
     runMigrations(temporaryPrismaRoot, integrationUrl);
+
+    process.env.DATABASE_URL = integrationUrl;
+    process.env.AUTH_JWT_SECRET = "p0-05-postgres-integration-secret";
+    process.env.AUTH_COOKIE_SECURE = "false";
+    process.env.AUTH_ALLOWED_ORIGINS = "http://localhost:5173";
+    ({ app: application } = await import("../app.js"));
+    ({ createSessionToken } = await import("../auth/session.js"));
+    ({ prisma: applicationPrisma } = await import("../prisma.js"));
   });
 
   afterAll(async () => {
@@ -156,14 +175,90 @@ describe.skipIf(!integrationEnabled)("PostgreSQL auth ownership enforcement", ()
       }
       await prisma.$disconnect();
     }
+    if (applicationPrisma && applicationPrisma !== prisma) {
+      await applicationPrisma.$disconnect();
+    }
     if (temporaryPrismaRoot) {
       rmSync(temporaryPrismaRoot, { recursive: true, force: true });
     }
   });
 
+  function authCookie(userId: "user-a" | "user-b") {
+    const email = userId === "user-a" ? "integration-a@example.test" : "integration-b@example.test";
+    return `auth_token=${createSessionToken({ id: userId, email, displayName: userId })}`;
+  }
+
+  function api(userId: "user-a" | "user-b") {
+    const cookie = authCookie(userId);
+    return {
+      get: (path: string) => request(application).get(path).set("Cookie", cookie),
+      post: (path: string) => request(application).post(path).set("Cookie", cookie),
+      patch: (path: string) => request(application).patch(path).set("Cookie", cookie),
+      delete: (path: string) => request(application).delete(path).set("Cookie", cookie),
+    };
+  }
+
+  it("keeps every published module isolated across authenticated users", async () => {
+    const ownAccounts = await api("user-a").get("/accounts").expect(200);
+    expect(ownAccounts.body.groups.flatMap((group: { accounts: { id: string }[] }) => group.accounts).map((account: { id: string }) => account.id)).toEqual(["account-a"]);
+    const otherAccounts = await api("user-b").get("/accounts").expect(200);
+    expect(otherAccounts.body.groups.flatMap((group: { accounts: { id: string }[] }) => group.accounts).map((account: { id: string }) => account.id)).toEqual(["account-b"]);
+
+    const ownGoals = await api("user-a").get("/goals").expect(200);
+    expect(ownGoals.body.groups.flatMap((group: { goals: { id: string }[] }) => group.goals).map((goal: { id: string }) => goal.id)).toEqual(["goal-a"]);
+    expect((await api("user-b").get("/goals").expect(200)).body.groups.flatMap((group: { goals: { id: string }[] }) => group.goals).map((goal: { id: string }) => goal.id)).toEqual(["goal-b"]);
+
+    const ownTemplates = await api("user-a").get("/commitment-templates").expect(200);
+    expect(ownTemplates.body.templates.map((template: { id: string }) => template.id)).toEqual(["template-a"]);
+    expect((await api("user-b").get("/commitment-templates").expect(200)).body.templates.map((template: { id: string }) => template.id)).toEqual(["template-b"]);
+
+    const ownCommitments = await api("user-a").get("/commitments?month=2026-07").expect(200);
+    expect(ownCommitments.body.groups.flatMap((group: { commitments?: { id: string }[]; items?: { id: string }[] }) => group.commitments ?? group.items ?? []).map((item: { id: string }) => item.id)).toContain("commitment-a");
+    expect(JSON.stringify((await api("user-b").get("/commitments?month=2026-07").expect(200)).body)).not.toContain("commitment-a");
+
+    const ownMovements = await api("user-a").get("/movements?month=2026-07").expect(200);
+    expect(JSON.stringify(ownMovements.body)).not.toContain("transaction-b");
+    expect(JSON.stringify((await api("user-b").get("/movements?month=2026-07").expect(200)).body)).not.toContain("transaction-a");
+
+    const ownLoans = await api("user-a").get("/loans").expect(200);
+    expect(ownLoans.body.loans.map((loan: { id: string }) => loan.id)).toEqual(["loan-a"]);
+    expect((await api("user-b").get("/loans").expect(200)).body.loans.map((loan: { id: string }) => loan.id)).toEqual(["loan-b"]);
+
+    await api("user-a").get("/loans/loan-b").expect(404);
+    await api("user-a").patch("/accounts/account-b").send({ name: "tampered", type: "OPERATIVA", balance: 1000 }).expect(404);
+    await api("user-a").delete("/accounts/account-b").expect(404);
+    await api("user-a").patch("/goals/goal-b").send({ name: "tampered", targetAmount: 1, accountId: "account-b" }).expect(404);
+    await api("user-a").delete("/goals/goal-b").expect(404);
+    await api("user-a").patch("/commitment-templates/template-b").send({ activa: false }).expect(404);
+    await api("user-a").delete("/commitment-templates/template-b").expect(404);
+    await api("user-a").patch("/commitments/commitment-b").send({ nombre: "tampered", tipo: "RECURRENTE", monto: 40, month: "2026-07", fechaVencimiento: "2026-07-07" }).expect(404);
+    await api("user-a").delete("/commitments/commitment-b").expect(404);
+    await api("user-a").patch("/movements/transaction-b").send({ tipo: "GASTO", monto: 50, accountId: "account-b", categoryId: "category-b", fecha: "2026-07-15" }).expect(404);
+    await api("user-a").delete("/movements/transaction-b").expect(404);
+    await api("user-a").patch("/loans/loan-b").send({ persona: "tampered" }).expect(404);
+    await api("user-a").delete("/loans/loan-b").expect(404);
+
+    await api("user-a").post("/transactions").send({ tipo: "GASTO", monto: 10, accountId: "account-b", categoryId: "category-a" }).expect(400);
+    await api("user-a").post("/transactions").send({ tipo: "GASTO", monto: 10, accountId: "account-a", categoryId: "category-b" }).expect(400);
+    await api("user-a").post("/transactions").send({ tipo: "TRANSFERENCIA", monto: 10, fromAccountId: "account-a", toAccountId: "account-b" }).expect(400);
+    await api("user-a").post("/goals").send({ name: "invalid", targetAmount: 100, accountId: "account-b" }).expect(400);
+    await api("user-a").post("/loans").send({ persona: "invalid", montoEntregado: 10, accountId: "account-b" }).expect(400);
+    await api("user-a").post("/loans/loan-a/repayments").send({ monto: 10, accountId: "account-b" }).expect(400);
+    await api("user-a").post("/loans/loan-b/repayments").send({ monto: 10, accountId: "account-a" }).expect(404);
+
+    await api("user-a").patch("/commitments/commitment-b/pay").send({ accountId: "account-a", categoryId: "category-a" }).expect(404);
+    await api("user-a").patch("/commitments/commitment-b/unpay").expect(404);
+    await api("user-a").patch("/commitments/commitment-a/pay").send({ accountId: "account-b", categoryId: "category-a" }).expect(400);
+    expect((await prisma.commitment.findUnique({ where: { id: "commitment-a" } }))?.estado).toBe("PENDIENTE");
+    await api("user-a").patch("/commitments/commitment-a/pay").send({ accountId: "account-a", categoryId: "category-a" }).expect(200);
+    await api("user-b").patch("/commitments/commitment-a/unpay").expect(404);
+    await api("user-a").patch("/commitments/commitment-a/unpay").expect(200);
+    expect((await prisma.commitment.findUnique({ where: { id: "commitment-a" } }))?.estado).toBe("PENDIENTE");
+  });
+
   it("enforces owner-scoped relationships, uniqueness, loans, and restrictive deletion", async () => {
     const categoryB = await prisma.category.create({
-      data: { id: "category-b", nombre: "Food", icono: "food", tipo: "GASTO", orden: 0, userId: "user-b" },
+      data: { id: "category-b-uniqueness", nombre: "Food", icono: "food", tipo: "GASTO", orden: 0, userId: "user-b" },
     });
     expect(categoryB.userId).toBe("user-b");
 
@@ -225,6 +320,7 @@ describe.skipIf(!integrationEnabled)("PostgreSQL auth ownership enforcement", ()
     ).rejects.toThrow();
 
     const loan = await prisma.loan.findUnique({ where: { id: "loan-a" }, include: { devoluciones: true } });
+    expect(loan?.entregaTransactionId).toBe("transaction-a");
     expect(loan?.devoluciones).toHaveLength(1);
     expect(loan?.devoluciones[0]?.transactionId).toBe("transaction-repayment");
 

@@ -2,8 +2,10 @@ import { z } from "zod";
 import cors from "cors";
 import express from "express";
 
+import { getCorsConfig, getLoginRateLimitConfig } from "./auth/config.js";
 import { requireAuth } from "./auth/middleware.js";
-import { AuthenticationError, clearAuthCookie, createSessionToken, loginWithPassword, resolveCurrentUser, setAuthCookie } from "./auth/session.js";
+import { AuthenticationError, clearAuthCookie, createSessionToken, loginWithPassword, resolveCurrentUser, revokeCurrentSession, setAuthCookie } from "./auth/session.js";
+import { createLoginRateLimiter, getLoginRateLimitKey } from "./auth/loginProtection.js";
 import { getAccounts } from "./accounts/getAccounts.js";
 import { createAccount } from "./accounts/createAccount.js";
 import { AccountUpdateNotFoundError, LoanAccountConflictError, updateAccount } from "./accounts/updateAccount.js";
@@ -40,29 +42,64 @@ const LoginDTO = z.object({
   password: z.string().min(1),
 });
 
-app.use(cors());
+const loginRateLimiter = createLoginRateLimiter(getLoginRateLimitConfig());
+
+export function resetLoginRateLimiterForTests() {
+  loginRateLimiter.reset();
+}
+
+app.use(cors({
+  credentials: true,
+  origin: (origin, callback) => {
+    const { allowedOrigins } = getCorsConfig();
+    callback(null, origin && allowedOrigins.includes(origin) ? origin : false);
+  },
+}));
 app.use(express.json());
+app.use((_request, response, next) => {
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  if (process.env.NODE_ENV === "production") response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
 
 app.get("/health", (_request, response) => {
   response.json({ status: "ok" });
 });
 
 app.post("/auth/login", async (request, response, next) => {
+  const rateLimitKey = getLoginRateLimitKey(request);
+  const decision = loginRateLimiter.check(rateLimitKey);
+  if (!decision.allowed) {
+    response.setHeader("Retry-After", String(decision.retryAfterSeconds));
+    response.status(429).json({ error: "Too many login attempts. Please try again later." });
+    return;
+  }
+
   try {
     const credentials = LoginDTO.parse(request.body);
     const user = await loginWithPassword(credentials.email, credentials.password);
     const token = createSessionToken(user);
 
+    loginRateLimiter.recordSuccess(rateLimitKey);
     setAuthCookie(response, token);
-    response.json({ user });
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ user: { id: user.id, email: user.email, displayName: user.displayName } });
   } catch (error) {
+    if (error instanceof AuthenticationError) loginRateLimiter.recordFailure(rateLimitKey);
     next(error);
   }
 });
 
-app.post("/auth/logout", (_request, response) => {
-  clearAuthCookie(response);
-  response.status(204).send();
+app.post("/auth/logout", async (request, response, next) => {
+  try {
+    await revokeCurrentSession(request);
+    clearAuthCookie(response);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/auth/session", async (request, response, next) => {

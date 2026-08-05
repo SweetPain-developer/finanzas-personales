@@ -10,6 +10,7 @@ vi.hoisted(() => {
 const prismaMock = vi.hoisted(() => ({
   user: {
     findUnique: vi.fn(),
+    updateMany: vi.fn(),
   },
 }));
 
@@ -23,6 +24,7 @@ const { hashPassword } = await import("./password.js");
 describe("auth API", () => {
   beforeEach(() => {
     prismaMock.user.findUnique.mockReset();
+    prismaMock.user.updateMany.mockReset();
     process.env.AUTH_JWT_SECRET = "test-secret-with-enough-entropy";
     process.env.AUTH_COOKIE_SECURE = "false";
     delete process.env.AUTH_COOKIE_NAME;
@@ -41,6 +43,7 @@ describe("auth API", () => {
       email: "demo@example.com",
       displayName: "Demo User",
       passwordHash: await hashPassword("correct-password"),
+      sessionVersion: 0,
     });
 
     const response = await request(app)
@@ -62,6 +65,7 @@ describe("auth API", () => {
       email: "demo@example.com",
       displayName: "Demo User",
       passwordHash: await hashPassword("correct-password"),
+      sessionVersion: 0,
     });
 
     const response = await request(app)
@@ -78,6 +82,7 @@ describe("auth API", () => {
       email: "demo@example.com",
       displayName: "Demo User",
       passwordHash: await hashPassword("correct-password"),
+      sessionVersion: 0,
     });
 
     const response = await request(app)
@@ -95,12 +100,21 @@ describe("auth API", () => {
       email: "demo@example.com",
       displayName: null,
       passwordHash: await hashPassword("correct-password"),
+      sessionVersion: 0,
     });
 
     const login = await request(app)
       .post("/auth/login")
       .send({ email: "demo@example.com", password: "correct-password" })
       .expect(200);
+
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "user-demo",
+      email: "demo@example.com",
+      displayName: null,
+      passwordHash: "unused",
+      sessionVersion: 0,
+    });
 
     const response = await request(app)
       .get("/auth/session")
@@ -143,6 +157,53 @@ describe("auth API", () => {
 
     expect(response.headers["set-cookie"]?.[0]).toContain("auth_token=");
     expect(response.headers["set-cookie"]?.[0]).toContain("Max-Age=0");
+  });
+
+  it("revokes the current token on logout", async () => {
+    const token = jwt.sign(
+      { sub: "user-demo", email: "demo@example.com", displayName: null, sessionVersion: 0 },
+      "test-secret-with-enough-entropy",
+      { expiresIn: 900 },
+    );
+
+    prismaMock.user.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await request(app).post("/auth/logout").set("Cookie", `auth_token=${token}`).expect(204);
+
+    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "user-demo", sessionVersion: 0 },
+      data: { sessionVersion: { increment: 1 } },
+    });
+  });
+
+  it("rejects a token with invalid session claims", async () => {
+    const token = jwt.sign(
+      { sub: "user-demo", email: "demo@example.com", displayName: null, sessionVersion: -1 },
+      "test-secret-with-enough-entropy",
+    );
+
+    const response = await request(app).get("/auth/session").set("Cookie", `auth_token=${token}`).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects a correctly signed token whose session version was revoked", async () => {
+    const token = jwt.sign(
+      { sub: "user-demo", email: "demo@example.com", displayName: null, sessionVersion: 0 },
+      "test-secret-with-enough-entropy",
+    );
+    prismaMock.user.findUnique.mockResolvedValueOnce({
+      id: "user-demo",
+      email: "demo@example.com",
+      displayName: null,
+      passwordHash: "unused",
+      sessionVersion: 1,
+    });
+
+    const response = await request(app).get("/auth/session").set("Cookie", `auth_token=${token}`).expect(401);
+
+    expect(response.body).toEqual({ error: "Authentication required." });
   });
 
   it("rejects unauthenticated financial routes", async () => {

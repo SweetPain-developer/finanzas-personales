@@ -752,6 +752,15 @@ h2 {
   gap: 10px;
 }
 
+.movement-edit-actions > .app-action-button,
+.movement-edit-actions > .movement-detail-edit-button {
+  box-sizing: border-box;
+  min-height: 36px;
+  margin-top: 0;
+  padding: 8px 14px;
+  line-height: 1.2;
+}
+
 .accounts-phone {
   padding-bottom: 96px;
 }

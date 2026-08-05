@@ -3,7 +3,7 @@
 **Proyecto**: Finanzas Personales (nombre tentativo)
 **Fecha**: 04 de julio de 2026
 **Autor**: Equipo del proyecto
-**Estado**: MVP funcional avanzado — documentación actualizada al 12 de julio de 2026
+**Estado**: MVP funcional avanzado — documentación actualizada al 17 de julio de 2026
 
 > Nota de privacidad: los nombres de cuentas, contextos y ejemplos financieros de este documento son genéricos y no representan datos personales reales.
 
@@ -98,7 +98,7 @@ Una app web progresiva (PWA) de uso personal que reemplaza el workflow de tres h
 | Base de datos | PostgreSQL | Simple, relacional, suficiente |
 | Hosting | Cloudflare Pages + Render, más adelante | Razonable para separar Web/API; esperar auth + ownership antes de exponer públicamente |
 | Mobile | PWA (Progressive Web App) | Funciona en Android sin publicar en Play Store |
-| Auth | Diseñada, pendiente de implementar | Siguiente corte: `User + userId` ownership, producto cerrado y sin registro público antes de deploy. |
+| Auth | Implementada y aplicada localmente | Login/session/logout con JWT en cookie HTTP-only, login gate Web, ownership y enforcement local; deploy público/CI requiere repetir el runbook en destino. |
 
 ---
 
@@ -161,7 +161,7 @@ Disponible =
 | Compromisos | ✅ Completo para V1 operativa | CRUD, selector de mes, plantillas recurrentes, pago y reversa segura implementados. Editar una plantilla no muta compromisos ya generados; la UI avisa si el compromiso del mes visible ya existe. |
 | Importación real local | ✅ Controlada | Importador probado y ejecutado localmente tras backup y confirmación explícita; no expone workbooks ni respaldos al repo. |
 | PWA | 🔲 Pendiente | Manifest, instalación móvil, iconos y offline básico siguen en backlog V1. |
-| Auth + ownership | 🔲 Diseñado | Documentado en `docs/diseno_auth_ownership_finanzas_personales.md`; pendiente de implementación antes de deploy público. |
+| Auth + ownership | ✅ Implementado y aplicado localmente | Auth, login gate, ownership API/Web y enforcement local verificados; no se declara enforcement remoto ni deploy público. |
 
 ### Excluido de V1 (backlog)
 
@@ -203,7 +203,7 @@ Disponible =
 
 ## 11. Próximas acciones
 
-1. **Auth + ownership** — implementar `User` + `userId` antes de deploy público o acceso fuera de entorno local controlado.
+1. **Deploy público/CI** — repetir secuencialmente backup, quiescence, backfill, enforcement y verificación en el destino; no asumir que la aplicación local implica una base remota.
 2. **Checklist de entrega V1** — ejecutar validación manual pendiente, deuda UX menor y flujo diario completo antes de uso real sostenido.
 3. **PWA y opcionales post-MVP** — manifest/offline si hace falta, mejoras de búsqueda/scroll y scripts raíz para levantar web + API juntos.
 

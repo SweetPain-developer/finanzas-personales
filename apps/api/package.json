@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "build": "rm -rf dist && esbuild src/server.ts --bundle --platform=node --format=cjs --target=node18 --packages=bundle --external:argon2 --external:@prisma/client --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "import:real-data:dry-run": "tsx src/scripts/importRealDataFromWorkbook.ts",
@@ -28,6 +30,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.2",
     "@types/supertest": "^7.2.0",
+    "esbuild": "^0.28.1",
     "prisma": "^6.11.1",
     "supertest": "^7.2.2",
     "tsx": "^4.19.2",

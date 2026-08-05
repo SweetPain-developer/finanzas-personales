@@ -9,7 +9,7 @@ El archivo real **no debe commitearse**. Copia o renombra tu workbook local a es
 - El importador controlado existe y está cubierto por tests.
 - La importación local real se ejecutó correctamente después de crear un backup y recibir confirmación explícita.
 - El backup queda en una carpeta local ignorada para respaldos; no se deben documentar nombres reales, rutas sensibles ni contenido del workbook.
-- Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+- Snapshot auditado posterior: 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo y 0 devoluciones.
 
 ## Comandos
 

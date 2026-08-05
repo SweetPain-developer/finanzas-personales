@@ -1,6 +1,6 @@
 # Mockups — Finanzas Personales
 
-**Estado**: prototipos exploratorios, no producción.
+**Estado**: prototipos exploratorios, no producción. Loans ya tiene implementación productiva; este índice conserva el mockup como referencia histórica de UX.
 
 ## Qué son estos archivos
 
@@ -35,5 +35,5 @@ Estos mockups ya reflejan las decisiones cerradas en la sección 8 de `diseno_ui
 - Numerar con prefijo de dos dígitos según el orden en que aparece en el flujo de navegación (`07-`, `08-`, ...).
 - Un solo archivo por pantalla, `export default` del componente principal.
 - Datos mock declarados arriba del componente, comentados si simulan una relación con otra entidad (ej. `METAS_ACTIVAS` simulando `Goal` filtrado por `accountId`).
-- Si el mockup revela una decisión de diseño o de schema que faltaba cerrar, esa decisión se documenta en `diseno_ui_finanzas_personales.md`, no acá — este README es un índice, no el lugar donde se registran decisiones.
-- Para `07-prestamos.jsx`, el mockup debe validar únicamente el diseño aprobado del primer slice. No debe presentarse como implementación productiva ni asumir que `Loan`, `LoanRepayment` o la transacción de entrega ya existen en el schema o la API.
+- Si el mockup revela una decisión de diseño o de schema que faltaba cerrar, esa decisión se documenta en `diseno_ui_finanzas_personales.md`, no acá — este README es un índice, no el lugar donde se registran decisiones. Para Loans, la implementación real en schema/API/Web tiene precedencia sobre el mockup.
+- Para `07-prestamos.jsx`, el mockup valida únicamente el diseño aprobado del primer slice. No es implementación productiva; `Loan`, `LoanRepayment` y la transacción de entrega existen actualmente en schema/API/Web conforme a la implementación real.

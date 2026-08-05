@@ -1,6 +1,6 @@
 # Harness — Préstamos por cobrar
 
-**Estado**: diseño aprobado, implementación pendiente.
+**Estado**: implementado end-to-end y aplicado localmente; deploy público/CI pendiente.
 
 Este documento es la guía técnica específica para implementar el módulo de dinero por cobrar. Complementa a `harness_finanzas_personales.md`; no reemplaza el schema ni los documentos de diseño. Sus decisiones cerradas no deben reabrirse sin solicitud explícita.
 
@@ -80,7 +80,7 @@ La entrega y la devolución son movimientos financieros de cuentas, pero no son 
 
 ## Estado de entrega
 
-**Diseño aprobado. Implementación pendiente.** Este harness no declara que `Loan`, `LoanRepayment`, API, UI productiva o migraciones ya existan.
+**Implementado end-to-end y verificado localmente.** Existen `Loan`, `LoanRepayment`, API, UI productiva, ownership y migraciones aplicadas localmente. No se declara aplicación de enforcement ni deploy en una base remota.
 
 ## Contrato API implementado
 

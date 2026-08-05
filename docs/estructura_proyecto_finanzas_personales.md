@@ -1,7 +1,7 @@
 # Estructura de Proyecto — Finanzas Personales
 
 **Fecha**: 04 de julio de 2026
-**Estado**: Decisión cerrada — creada e implementada. MVP funcional avanzado; auth + ownership están implementados y el enforcement de base de datos queda como próximo corte antes de deploy público.
+**Estado**: Decisión cerrada — creada e implementada. MVP funcional avanzado; auth + ownership y enforcement de base de datos están aplicados y verificados localmente. Deploy público/CI pendiente de repetir el runbook en destino.
 **Contexto**: definido en `/docs`, junto a `documento_base_finanzas_personales.md`, `diseno_ui_finanzas_personales.md` y `schema.prisma`
 
 ---
@@ -122,16 +122,16 @@ La estructura ya aloja el flujo incremental actual.
 - `Metas`: creación, edición, eliminación segura, ciclo de estado y UX de progreso implementados. Las metas validan cuenta activa `AHORRO` o `RESERVA`; el progreso se deriva de `account.saldo / montoObjetivo` y las operaciones de meta no mutan saldos ni transacciones.
 - `Compromisos`: CRUD de `Commitment`, CRUD de `CommitmentTemplate`, selector/navegación de mes, flujo de pago y reversa segura implementados. La generación recurrente previene duplicados con único `(templateId, anio, mes)`, migración `20260711120000_commitment_template_month_unique` y `createMany(..., skipDuplicates: true)`. Editar una plantilla no muta compromisos ya generados; Web avisa si el compromiso del mes visible conserva valores anteriores.
 - Validación registrada: el aviso al editar una plantilla recurrente ya generada fue validado visualmente por el usuario.
-- Importación real: flujo local controlado implementado, testeado y ejecutado correctamente después de backup y confirmación explícita. Conteos post-importación: 8 cuentas, 18 categorías, 58 movimientos, 8 plantillas de compromiso, 9 compromisos y 4 metas.
+- Importación real: flujo local controlado implementado, testeado y ejecutado correctamente después de backup y confirmación explícita. Snapshot auditado actual: 8 cuentas, 18 categorías, 66 movimientos, 8 plantillas, 17 compromisos, 4 metas, 1 préstamo y 0 devoluciones.
 - Seguridad repo: `origin/main` publicado con commit `7ae4f07` (`chore: initial project setup`). Permanecen ignorados `.env`, workbooks de importación, backups, `.atl`, `.opencode`, `node_modules` y `dist`; artefactos públicos sanitizados con datos demo/genéricos.
-- Deploy: Cloudflare Pages + Render son opciones razonables más adelante, pero no se recomienda exponer la app hasta aplicar y verificar el enforcement de base de datos.
-- Auth: login/logout/session, middleware de autenticación, ownership por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. La migración de enforcement queda preparada, pendiente de aplicación.
+- Deploy: Cloudflare Pages + Render son opciones razonables más adelante; la aplicación local está verificada, pero el destino público/CI requiere repetir el runbook y verificar allí el enforcement.
+- Auth: login/logout/session, middleware de autenticación, ownership por `userId`, login gate Web, logout y manejo de expiración/`401` están implementados. Loans está integrado end-to-end. Las migraciones `20260716100000_loans_receivable` y `20260717100000_auth_ownership_enforcement` están aplicadas y verificadas localmente.
 
 ---
 
 ## 4. Próximo paso
 
-El próximo paso técnico documentado es revisar y aplicar, en una ventana controlada, la migración de enforcement `20260717100000_auth_ownership_enforcement` después del backfill y sus verificaciones. Auth + ownership con `User` y `userId` ya están implementados; el diseño está en `docs/diseno_auth_ownership_finanzas_personales.md`.
+El próximo paso técnico documentado es preparar el deploy público/CI repitiendo en el destino el runbook secuencial de backup, quiescence, backfill, enforcement y verificaciones. Auth + ownership con `User` y `userId`, Loans y el enforcement local ya están implementados y aplicados; el diseño está en `docs/diseno_auth_ownership_finanzas_personales.md`.
 
 ### Checks útiles
 
